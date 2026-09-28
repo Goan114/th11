@@ -1,0 +1,8 @@
+tools/
+th10_web/tools/
+**/node_modules/
+**/objects/
+**/__pycache__/
+**/.cache/
+*.zip
+*.log
