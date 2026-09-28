@@ -22,6 +22,7 @@ deploy/
 FILE-SHA256.json
 README-交付说明.md
 /*.cmd
+th11_web/*.cmd
 *.exe
 *.dll
 *.wasm
