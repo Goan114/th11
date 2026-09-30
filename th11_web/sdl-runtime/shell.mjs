@@ -85,7 +85,7 @@ async function command(m){switch(m.command){
  case 'keyboard-clear':core.th11_keys_clear();return {};
  case 'touch-cancel':cancelTouches();return {};
  case 'direct-touch':directTouch(core,canvas,m,{width:innerWidth,height:innerHeight});return {};
- case 'touch-controls':touchControls(core,options,m);core.sdl_touch_gap?.(!!(m.controls??m).th11GapHeld);return {};
+ case 'touch-controls':touchControls(core,options,m);return {};
  case 'launch':launch();return {};
  case 'sync':await save();return {};
  case 'list':{const files=[];for(const dir of ['','/replay'])for(const name of Module.FS.readdir('/savesth11'+dir)){const n=(dir+'/'+name).replace(/^\//,'');try{path(n);}catch{continue;}const s=Module.FS.stat('/savesth11/'+n);if(Module.FS.isFile(s.mode)){files.push({path:n,size:s.size});}}return {files};}

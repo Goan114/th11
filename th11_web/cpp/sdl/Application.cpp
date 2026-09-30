@@ -10,7 +10,6 @@
 #include <emscripten/html5.h>
 #include "../../../portable/sdl/FrameCadence.hpp"
 #include "../../../portable/input/TouchController.hpp"
-#include "../../../portable/input/GapInput.hpp"
 #include <algorithm>
 EM_JS(void, th11_browser_frame, (int ok,double milliseconds,unsigned ticks), { Module["onGameFrame"]?.(ok,milliseconds,ticks); });
 #include <vector>
@@ -240,7 +239,6 @@ Application app;
 struct Key {const char* code;const char* sdl;u32 scan,vk;bool hosted=false;SDL_Scancode native=SDL_SCANCODE_UNKNOWN;};
 #include "../../../portable/input/KeyboardMap.inc"
 touhou::input::TouchController gestures;
-th11::input::GapInput gap_input;
 touhou::sdl::FrameCadence cadence;
 bool running=false,suspended=false;u32 loop_epoch=0;double previous_frame=-1;
 std::array<u8,256> previous_scans{};
@@ -272,7 +270,7 @@ touhou::input::TouchState touch_state(){
     s.x=p.position.x;s.y=p.position.y;s.fast=float(p.normal_speed)/128;s.slow=float(p.focus_speed)/128;
     s.min_x=-184;s.max_x=184;s.min_y=32;s.max_y=432;return s;
 }
-void clear_inputs(){for(auto& k:keyboard_map)k.hosted=false;previous_scans.fill(0);SDL_ResetKeyboard();gestures.reset();gap_input.cancel();if(app.session.battle)app.session.battle->player_input.movement.touch_mode=0;}
+void clear_inputs(){for(auto& k:keyboard_map)k.hosted=false;previous_scans.fill(0);SDL_ResetKeyboard();gestures.reset();if(app.session.battle)app.session.battle->player_input.movement.touch_mode=0;}
 bool sample_and_tick(){
     SDL_Event event;while(SDL_PollEvent(&event)){
         if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST)clear_inputs();
@@ -287,23 +285,8 @@ bool sample_and_tick(){
     for(u32 n=0;n<256;++n)keys[n]=keys[n]||sample.keys[n];
     if(auto* b=app.session.battle.get()){b->player_input.movement.touch_mode=sample.motion;b->player_input.movement.touch_x=sample.x;b->player_input.movement.touch_y=sample.y;}
     const u32 raw=sample_controller()|keyboard_keys(keys);
-    u32 held=(raw&~0x80100u)|((raw&0x80000)?256:0),gap_keys=0;
-    auto* battle=app.session.battle.get();auto* player=battle?battle->player.get():nullptr;
-    const auto touch=touch_state();
-    const int warp=player?player->motion.state.warp:0;
-    const u32 previous_frame=app.session.state.frame,previous_stage=app.session.state.stage;
-    const bool gap=gap_input.sample(gestures.enabled&&touch.context==1&&touch.ready&&
-        app.session.state.character==0&&app.session.state.subtype==0,
-        touch.x,warp,gap_keys);
-    if(gap){held=(held&~0xf9u)|gap_keys;if(battle)battle->player_input.movement.touch_mode=0;}
-    const bool ok=app.tick(held,(raw&256)!=0);
-    if(app.session.state.frame<previous_frame||app.session.state.stage!=previous_stage)
-        gap_input.sample(false,0,0,gap_keys);
-    // A surviving drag must follow the wrap, not pull toward its old edge.
-    if(warp>=99&&app.session.battle.get()==battle&&battle&&battle->player.get()==player&&player&&((touch.x<0&&player->motion.state.position.x>0)||
-       (touch.x>0&&player->motion.state.position.x<0)))
-        gestures.rebase_motion(std::clamp(player->motion.state.position.x,-184.f,184.f),player->motion.state.position.y);
-    return ok;
+    const u32 held=(raw&~0x80100u)|((raw&0x80000)?256:0);
+    return app.tick(held,(raw&256)!=0);
 }
 }
 }
@@ -325,10 +308,6 @@ EMSCRIPTEN_KEEPALIVE int th11_probe_finish(){auto& s=th11::sdl::app.session;if(!
 EMSCRIPTEN_KEEPALIVE int th11_probe_complete(){auto& s=th11::sdl::app.session;return s.battle&&s.battle->dialogue_stage_complete();}
 EMSCRIPTEN_KEEPALIVE int th11_probe_dialogue(int id){auto& app=th11::sdl::app;return app.session.battle&&app.session.battle->start_dialogue(id)&&app.text_events();}
 EMSCRIPTEN_KEEPALIVE unsigned th11_text_writes(){return th11::sdl::app.fonts.writes;}
-EMSCRIPTEN_KEEPALIVE int th11_probe_platform_tick(){return th11::sdl::sample_and_tick();}
-EMSCRIPTEN_KEEPALIVE void th11_probe_gap_hold(unsigned held){th11::sdl::gap_input.hold(held!=0);}
-EMSCRIPTEN_KEEPALIVE void th11_probe_player_position(float x,float y){auto* b=th11::sdl::app.session.battle.get();if(b&&b->player){auto& s=b->player->motion.state;s.x=th11::truncate_int(x*128);s.y=th11::truncate_int(y*128);s.position.x=x;s.position.y=y;}}
-EMSCRIPTEN_KEEPALIVE const float* th11_probe_motion(){static float out[5];auto* b=th11::sdl::app.session.battle.get();if(!b||!b->player)return nullptr;const auto& s=b->player->motion.state;out[0]=s.position.x;out[1]=s.position.y;out[2]=float(s.warp);out[3]=float(b->player->state.life_state);out[4]=float(b->player_input.movement.held);return out;}
 EMSCRIPTEN_KEEPALIVE int th11_audio_probe(unsigned command,int value,float x){
     auto& a=th11::sdl::app.audio;
     if(command==0)return a.music(value);
@@ -344,12 +323,11 @@ EMSCRIPTEN_KEEPALIVE const char* th11_error(){return th11::sdl::app.error.c_str(
 EMSCRIPTEN_KEEPALIVE unsigned th11_frame(){return th11::sdl::app.session.state.frame;}
 EMSCRIPTEN_KEEPALIVE unsigned th11_phase(){return unsigned(th11::sdl::app.session.state.phase);}
 EMSCRIPTEN_KEEPALIVE int th11_return_title(){return th11::sdl::app.return_to_title()?1:0;}
-EMSCRIPTEN_KEEPALIVE int th11_restart(){th11::u32 unused=0;th11::sdl::gap_input.sample(false,0,0,unused);return th11::sdl::app.restart()?1:0;}
+EMSCRIPTEN_KEEPALIVE int th11_restart(){return th11::sdl::app.restart()?1:0;}
 EMSCRIPTEN_KEEPALIVE int th11_pause(){return th11::sdl::app.pause()?1:0;}
 EMSCRIPTEN_KEEPALIVE int th11_resume(){return th11::sdl::app.resume()?1:0;}
 EMSCRIPTEN_KEEPALIVE void th11_key(unsigned scan,unsigned down){for(auto& k:th11::sdl::keyboard_map)if(k.scan==scan)k.hosted=down!=0;}
 EMSCRIPTEN_KEEPALIVE void th11_keys_clear(){th11::sdl::clear_inputs();}
-__attribute__((export_name("sdl_touch_gap"))) void sdl_touch_gap(unsigned held){th11::sdl::gap_input.hold(held!=0);}
 EMSCRIPTEN_KEEPALIVE void th11_music_enabled(unsigned on){using namespace th11::sdl;app.audio.music_enabled=on!=0;app.audio.refresh_volume();}
 EMSCRIPTEN_KEEPALIVE const unsigned* th11_audio_statistics(){return th11::sdl::app.audio.statistics();}
 EMSCRIPTEN_KEEPALIVE void th11_loop_pause(unsigned on){using namespace th11::sdl;suspended=on!=0;app.audio.suspend(suspended);previous_frame=-1;cadence.reset();clear_inputs();app.reset_frame_window();}
@@ -371,7 +349,7 @@ EMSCRIPTEN_KEEPALIVE void th11_loop_start(){
     },reinterpret_cast<void*>(uintptr_t(++loop_epoch)));
 }
 EMSCRIPTEN_KEEPALIVE void th11_touch(unsigned type,int id,float x,float y){using namespace th11::sdl;if(std::isfinite(x)&&std::isfinite(y))gestures.pointer(type,id,x,y,SDL_GetTicks(),touch_state(),false);}
-EMSCRIPTEN_KEEPALIVE void th11_touch_cancel(){using namespace th11::sdl;gestures.cancel_transient();gap_input.cancel();if(app.session.battle)app.session.battle->player_input.movement.touch_mode=0;}
+EMSCRIPTEN_KEEPALIVE void th11_touch_cancel(){using namespace th11::sdl;gestures.cancel_transient();if(app.session.battle)app.session.battle->player_input.movement.touch_mode=0;}
 EMSCRIPTEN_KEEPALIVE void th11_touch_options(unsigned enabled,unsigned mode,float sensitivity,unsigned two_finger,unsigned double_tap){using namespace th11::sdl;gestures.enabled=enabled!=0;gestures.unlimited=mode==1;gestures.sensitivity=std::isfinite(sensitivity)?std::clamp(sensitivity,1.f,3.f):1;gestures.two_finger=two_finger!=0;gestures.double_tap=double_tap!=0;if(gestures.set_mode(mode<=3?int(mode):0))if(app.session.battle)app.session.battle->player_input.movement.touch_mode=0;if(!enabled)gestures.cancel();}
 EMSCRIPTEN_KEEPALIVE void th11_touch_controls(unsigned enabled,unsigned fire,unsigned focus,unsigned bomb,unsigned escape){using namespace th11::sdl;gestures.enabled=enabled!=0;gestures.controls(fire!=0,focus!=0,bomb,escape,0,0);}
 EMSCRIPTEN_KEEPALIVE void th11_touch_stick(float x,float y){using namespace th11::sdl;gestures.stick_x=std::isfinite(x)?std::clamp(x/32767.f,-1.f,1.f):0;gestures.stick_y=std::isfinite(y)?std::clamp(y/32767.f,-1.f,1.f):0;}

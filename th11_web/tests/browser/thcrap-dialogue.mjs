@@ -73,43 +73,6 @@ try{
                 if(shot===1)await page.screenshot({path:resolve(out,language+'-suika-line'+line+'.png')});
             }
         }
-        if(language==='lang_en'){
-            const gaps=await page.evaluate(()=>{
-                const c=core,state=()=>{const p=c._th11_probe_motion();return Array.from(new Float32Array(c.HEAPU8.buffer,p,5));};
-                const tick=()=>{if(!c._th11_probe_platform_tick())throw Error(error());return state();};
-                const start=(shot,x)=>{
-                    c._th11_keys_clear();if(!c._th11_probe_stage(1,Math.floor(shot/3),shot%3,0))throw Error(error());
-                    for(let i=0;i<150;++i)if(!c._th11_tick(0))throw Error(error());
-                    c._th11_probe_player_position(x,400);c._th11_touch_controls(1,1,1,0,0);
-                };
-                const result=[];
-                for(const x of [-184,184]){
-                    start(0,x);
-                    // Keep a drag alive across the transfer; its old target must rebase.
-                    c._th11_touch(0,22,.5,.5);c._th11_probe_gap_hold(1);
-                    const samples=[];for(let i=0;i<70;++i)samples.push(tick());
-                    const wrapped=samples.some(s=>x<0?s[0]>0:s[0]<0);
-                    c._th11_probe_gap_hold(0);const restored=tick();
-                    result.push({x,samples:samples.slice(0,5),wrapped,heldEnd:samples.at(-1),restored});
-                    c._th11_touch(2,22,.5,.5);
-                }
-                start(1,-184);c._th11_probe_gap_hold(1);const otherShot=[tick(),tick(),tick()];
-                start(0,-184);c._th11_probe_gap_hold(1);tick();c._th11_touch_cancel();const cancelled=tick();
-                start(0,-184);c._th11_probe_gap_hold(1);tick();c._th11_pause();tick();c._th11_resume();const resumed=tick();
-                return {result,otherShot,cancelled,resumed};
-            });
-            for(const result of gaps.result){
-                assert.ok(result.wrapped,`Gap wraps from ${result.x}: ${JSON.stringify(result)}`);
-                assert.deepEqual(result.samples.slice(0,3).map(s=>s[2]),[result.x<0?1:3,result.x<0?2:4,result.x<0?99:100]);
-                assert.ok(result.samples.every(s=>(s[4]&9)===0),'Fire/focus suspended during input sequence');
-                assert.equal(result.restored[4]&9,9,'Fire/focus restored on release');
-                assert.ok(result.x<0?result.restored[0]>100:result.restored[0]<-100,'Drag does not snap back to old edge');
-            }
-            assert.ok(gaps.otherShot.every(s=>s[2]===0&&(s[4]&9)===9),'Other shots retain fire/focus');
-            assert.equal(gaps.cancelled[4]&1,1,'Touch cancellation releases gap override');
-            assert.equal(gaps.resumed[4]&9,9,'Pause/resume does not re-arm held gap');
-            report.push({gaps});console.log('TH11 gap: left/right wrap, drag rebasing, restored controls, other shots, cancel and pause passed');
-        }
         assert.deepEqual(errors,[]);await page.close();console.log(language+': all six shot dialogues rendered');
     }
     writeFileSync(resolve(out,'report.json'),JSON.stringify({passed:true,report},null,2));

@@ -1,5 +1,4 @@
 #include "../../cpp/sdl/ThcrapLayout.hpp"
-#include "../../../portable/input/GapInput.hpp"
 #include <cassert>
 #include <iostream>
 using namespace th11::sdl;
@@ -34,17 +33,4 @@ int main(){
     line=thcrap_layout("<l$a<b$c>>",tabs,1024,width);
     assert(line.runs[0].text=="a<b$c>");
     std::cout<<"THCRAP layout: cross-line English/Chinese tabs, width references, alignment, suppression, font modifiers, nesting passed\n";
-    th11::input::GapInput gap;std::uint32_t key=0;
-    gap.hold(true);assert(!gap.sample(true,0,0,key));
-    assert(gap.sample(true,-184,0,key)&&key==0x40);
-    assert(gap.sample(true,-184,1,key)&&key==0);
-    assert(gap.sample(true,-184,2,key)&&key==0x40);
-    assert(gap.sample(true,-184,99,key)&&key==0);
-    assert(gap.sample(true,184,0,key)&&key==0);
-    gap.hold(false);assert(!gap.sample(true,184,0,key));
-    gap.hold(true);assert(gap.sample(true,184,0,key)&&key==0x80);
-    assert(!gap.sample(false,184,0,key));assert(!gap.sample(true,184,0,key));
-    gap.hold(false);gap.hold(true);assert(gap.sample(true,184,0,key));
-    gap.cancel();assert(!gap.sample(true,184,0,key));
-    std::cout<<"TH11 gap: left/right frame sequence, one wrap per hold, cancellation and new-press ownership passed\n";
 }
