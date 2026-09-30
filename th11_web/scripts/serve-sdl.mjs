@@ -6,9 +6,9 @@ import {resolve,extname} from 'node:path';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const files=new Map([
  ['/', 'sdl-runtime/th11.html'],['/app/style.css','sdl-runtime/style.css'],
- ['/app/shell.mjs','sdl-runtime/shell-harness.mjs'],['/app/frame-clock.mjs','sdl-runtime/frame-clock.mjs'],
+ ['/app/shell.mjs','sdl-runtime/shell.mjs'],['/app/frame-clock.mjs','sdl-runtime/frame-clock.mjs'],
  ['/th11-harness.mjs','artifacts/sdl3/th11-harness.mjs'],['/th11-harness.wasm','artifacts/sdl3/th11-harness.wasm'],
- ['/th11.dat','../[th11] 东方地灵�?(汉化�?日文�?/th11.dat']
+ ['/th11.dat','../[th11] 东方地灵殿 (汉化版+日文版)/th11.dat']
 ]);
 files.set('/music-index.json','assets/sdl-native/music-verification.json');
 files.set('/fonts-index.json','assets/sdl-native/fonts/manifest.json');

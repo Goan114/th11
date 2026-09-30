@@ -1,6 +1,4 @@
 **/artifacts/
-build-eagler/
-assets-ogg/
 **/node_modules/
 **/.cache/
 **/.npm-cache/
