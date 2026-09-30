@@ -20,6 +20,40 @@ const sync=(populate=false)=>{const current=storageSync.then(()=>new Promise((r,
 const coreError=()=>{const p=core.th11_error(),end=Module.HEAPU8.indexOf(0,p);return new TextDecoder().decode(Module.HEAPU8.subarray(p,end<0?p+256:end));};
 const save=()=>{if(launched&&!core.th11_save_scores())throw Error(coreError());return sync(false);};
 async function installResources(resources=[]){return installHostResources(Module,resources,{game,emit});}
+// The Launcher has already verified the ZIP identity. Match TH10's Runtime
+// manifest/path/size checks before exposing any file to the native game.
+let runtimePackFiles=[];
+function assertRuntimePackManifest(manifest,pack){
+ if(manifest?.schema!=='eagler-touhou/thcrap-static-pack/1'||manifest.game!==game||
+    manifest.language!==pack.language||typeof manifest.runtimeVersion!=='string'||
+    !Array.isArray(manifest.files)||manifest.files.length>256)throw Error('Invalid TH11 language pack manifest');
+ for(const file of manifest.files)
+  if(typeof file?.path!=='string'||!file.path.startsWith('/thcrap/th11/')||file.path.includes('\\')||file.path.includes('..')||
+     !Number.isInteger(file.bytes)||file.bytes<0)throw Error('Invalid TH11 language pack file');
+}
+async function installRuntimePack(pack){
+ if(launched)throw Error('Runtime resources cannot be changed after launch');
+ if(typeof pack?.url!=='string'||typeof pack.language!=='string'||
+    !Number.isInteger(pack.bytes)||pack.bytes<=0||!pack.manifest||!Array.isArray(pack.files))throw Error('Invalid TH11 language pack');
+ if(new URL(pack.url,location.href).origin!==location.origin)throw Error('Cross-origin TH11 language pack');
+ assertRuntimePackManifest(pack.manifest,pack);
+ const expected=new Map(pack.manifest.files.map(file=>[file.path,file]));
+ if(pack.files.length!==expected.size)throw Error('TH11 language pack file count mismatch');
+ const verified=[];
+ for(const file of pack.files){
+  if(typeof file?.path!=='string'||!file.path.startsWith('/thcrap/th11/')||file.path.includes('\\')||file.path.includes('..')||
+     !(file.bytes instanceof Uint8Array))throw Error('Invalid TH11 language pack path');
+  const declaration=expected.get(file.path);
+  if(!declaration||file.bytes.length!==declaration.bytes)throw Error(file.path+': size mismatch');
+  verified.push({path:file.path,bytes:file.bytes});
+ }
+ for(const path of runtimePackFiles){try{Module.FS.unlink(path);}catch{}}
+ runtimePackFiles=[];
+ for(const file of verified){
+  Module.FS.mkdirTree(file.path.slice(0,file.path.lastIndexOf('/')));
+  Module.FS.writeFile(file.path,file.bytes,{canOwn:true});runtimePackFiles.push(file.path);
+ }
+}
 function apply(){applyTouchOptions(core,options);core.th11_music_enabled(+music);}
 async function resumeForegroundAudio(forcePause=false){
  if(!Module||!core||!launched||document.hidden)return false;
@@ -45,13 +79,13 @@ function launch(){
  emit('runtime-info',{renderer:'SDL3 / WebGL2 / C++',architecture:protocol,version:runtimeBuild.version});
 }
 async function command(m){switch(m.command){
- case 'configure':if(launched)throw Error('不能配置正在运行的游戏');language=m.language==='lang_zh-hans'?'chs':'jp';options=normalizeOptions(m.options);music=m.music!=='none';musicMode=m.music;await installResources(m.sharedResources);await installResources(m.runtimeResources);await installResources(m.resources);apply();return {};
+ case 'configure':if(launched)throw Error('不能配置正在运行的游戏');language=m.language==='lang_zh-hans'?'chs':'jp';options=normalizeOptions(m.options);music=m.music!=='none';musicMode=m.music;await installResources(m.sharedResources);await installResources(m.runtimeResources);await installResources(m.resources);if(m.runtimePack)await installRuntimePack(m.runtimePack);apply();return {};
  case 'resources':await installResources(m.resources);return {};
  case 'keyboard':{const code=runtimeKeyboardCode(m);if(code&&scanCodes[code])core.th11_key(scanCodes[code],+!!m.down);return {};}
  case 'keyboard-clear':core.th11_keys_clear();return {};
  case 'touch-cancel':cancelTouches();return {};
  case 'direct-touch':directTouch(core,canvas,m,{width:innerWidth,height:innerHeight});return {};
- case 'touch-controls':touchControls(core,options,m);return {};
+ case 'touch-controls':touchControls(core,options,m);core.sdl_touch_gap?.(!!(m.controls??m).th11GapHeld);return {};
  case 'launch':launch();return {};
  case 'sync':await save();return {};
  case 'list':{const files=[];for(const dir of ['','/replay'])for(const name of Module.FS.readdir('/savesth11'+dir)){const n=(dir+'/'+name).replace(/^\//,'');try{path(n);}catch{continue;}const s=Module.FS.stat('/savesth11/'+n);if(Module.FS.isFile(s.mode)){files.push({path:n,size:s.size});}}return {files};}

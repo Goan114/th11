@@ -18,6 +18,7 @@ public:
     bool enabled=true,unlimited=false,fire=false,focus=false,two_finger=false,double_tap=false;
     float sensitivity=1,stick_x=0,stick_y=0;int mode=0;
     void clear_motion(){dragging=false;motion_blocked=false;primary=instance=0;}
+    void rebase_motion(float x,float y){target_x=x;target_y=y;}
     void cancel(){clear_motion();fingers.clear();menu={};dialogue={};tap={};tap_armed=false;}
     // Clear input owned by a transient browser gesture. The fire button is a
     // launcher toggle and deliberately survives focus loss/runtime cleanup.
