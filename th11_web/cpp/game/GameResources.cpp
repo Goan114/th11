@@ -1,5 +1,8 @@
 #include "GameResources.hpp"
 #include <cstdio>
+#if defined(TH_NATIVE_PLATFORM) && defined(TH_ENABLE_THCRAP)
+#include <SDL3/SDL.h>
+#endif
 
 namespace th11 {
 
@@ -29,6 +32,23 @@ bool GameResources::has(const std::string& name) const noexcept {
 bool GameResources::read(const std::string& name, std::vector<u8>& data) {
     const auto found = lookup.find(name);
     if (found == lookup.end()) return fail("missing archive resource");
+#if defined(TH_NATIVE_PLATFORM) && defined(TH_ENABLE_THCRAP)
+    // Same boundary as TH10 ResourceFiles: a prepared /thcrap/th11/<entry>
+    // overrides one original archive entry; absent files use the retail DAT.
+    if (!name.empty() && name.front() != '/' && name.find("..") == std::string::npos &&
+        name.find('\\') == std::string::npos && name.find(':') == std::string::npos) {
+        const std::string path = "/thcrap/th11/" + name;
+        size_t length = 0;
+        void* bytes = SDL_LoadFile(path.c_str(), &length);
+        if (bytes) {
+            if (length > 64u * 1024u * 1024u) { SDL_free(bytes); return fail("oversized THCRAP override"); }
+            const auto* begin = static_cast<const u8*>(bytes);
+            data.assign(begin, begin + length);
+            SDL_free(bytes);
+            return true;
+        }
+    }
+#endif
     if (!archive.read(found->second, data)) return fail("resource decode failed");
     return true;
 }

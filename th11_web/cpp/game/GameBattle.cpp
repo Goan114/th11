@@ -1,4 +1,5 @@
 #include "GameBattle.hpp"
+#include "Localization.hpp"
 #include "GameSession.hpp"
 #include <algorithm>
 
@@ -388,7 +389,7 @@ bool GameBattle::spell_begin_visuals(i32 id,i32 timeout,const char* name){
     cancellation={spell_flags,spell_id};
     auto create=[&](AnmResource& resource,i32 script,u16 file,u32* result=nullptr){auto* vm=animations.create(resource,script,file,22,false,false);if(result)*result=vm?vm->id:0;return vm;};
     if(!create(resources.core.ascii,1,2,&spell_titles[0])||!create(resources.core.text,74,0,&spell_titles[1])||!create(resources.core.ascii,2,2,&spell_titles[2]))return false;
-    dialogue_text_requests.push_back({spell_titles[1],0xffffff,0,0,0,name?name:"",true});
+    dialogue_text_requests.push_back({spell_titles[1],0xffffff,0,0,0,Localization::SpellName(u32(id),name?name:""),true});
     events.push_back({BattleEventKind::SpellTitle,i32(spell_titles[1]),id});
     if(!sound(14,0,false))return false;
     auto* circle=create(resources.core.bullet,139,6,&spell_circle);if(!circle)return false;

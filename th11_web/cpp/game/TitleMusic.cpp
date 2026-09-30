@@ -1,6 +1,9 @@
 #include "TitleMenu.hpp"
+#include "Localization.hpp"
 #include <cstdio>
 #include <cmath>
+#include <cstring>
+#include <utility>
 namespace th11 {
 namespace {
 const char* unheard_warning[]={
@@ -40,7 +43,25 @@ void TitleMenu::music_comment(){
     auto& s=music_state;if(timer.current%2||s.line>=8)return;
     auto* vm=animations.find(handles[230+s.line]);if(!vm){error="music comment animation missing";return;}
     const bool prompt=!scores.settings[0x26+s.selected]&&s.prompt;
-    text_requests.push_back({vm->id,prompt?0x8080ffu:0xffffffu,0,0,0,prompt?unheard_warning[s.line]:music_entries[s.selected].comment[s.line]});
+    std::string value;
+    bool centered=false;
+    if(prompt){
+        static constexpr i32 spoiler_row[8]={0,1,0,2,3,0,4,5};
+        const char* translated=unheard_warning[s.line];
+        if(spoiler_row[s.line]){char id[48];std::snprintf(id,sizeof id,"th10 Music Room spoiler %d",spoiler_row[s.line]);
+            translated=Localization::StringById(id,translated);}
+        value=translated;
+        // thcrap's <c$...$> carries centered-text markup rather than glyphs.
+        if(value.size()>=5&&value.rfind("<c$",0)==0&&value.compare(value.size()-2,2,"$>")==0){
+            value=value.substr(3,value.size()-5);centered=true;
+        }
+    }else{
+        const auto& original=music_entries[s.selected].comment[s.line];
+        const char* translated=Localization::MusicComment(u32(s.selected+1),u16(s.line),original.c_str());
+        if(std::strcmp(translated,"@")==0)translated=Localization::MusicTitle(u32(s.selected+1),music_entries[s.selected].title.c_str());
+        value=translated;
+    }
+    text_requests.push_back({vm->id,prompt?0x8080ffu:0xffffffu,0,0,0,std::move(value),false,centered});
     vm->pending_interrupt=2;++s.line;
 }
 void TitleMenu::music_room(u32 pressed,u32 repeat){
@@ -54,8 +75,16 @@ void TitleMenu::music_room(u32 pressed,u32 repeat){
             for(i32 line=0;line<8;++line)create(41+line,230+line,3);s.line=s.selected=s.prompt=0;
         }
         if(timer.current>0&&timer.current<10)for(i32 i=timer.current*2-2;i<timer.current*2&&i<s.count;++i){
-            create(171+i,210+i);std::string name=music_entries[i].title;
-            if(!scores.settings[0x26+i]){char prefix[16];std::snprintf(prefix,sizeof(prefix),"No.%2d ",i+1);name=prefix;for(i32 n=0;n<11;++n)name+="\x81\x48";}
+            create(171+i,210+i);const char* translated=Localization::MusicTitle(u32(i+1),music_entries[i].title.c_str());
+            std::string name=translated;
+            if(translated!=music_entries[i].title.c_str()){
+                char prefix[16];std::snprintf(prefix,sizeof prefix,"No.%2d ",i+1);name=prefix+name;
+            }
+            if(!scores.settings[0x26+i]){
+                std::string fallback="No.%2d ";for(i32 n=0;n<11;++n)fallback+="\x81\x48";
+                const char* format=Localization::FormatStringById("Music Room Unknown Title",fallback.c_str());
+                char line[256];std::snprintf(line,sizeof line,format,i+1);name=line;
+            }
             text_requests.push_back({handles[210+i],0xffffff,0,0,0,std::move(name)});music_position(i,true);
         }
         if(timer.current>=10)step(1);break;

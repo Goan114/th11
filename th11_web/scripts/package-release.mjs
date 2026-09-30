@@ -24,10 +24,10 @@ while(pending.length){const n=pending.pop();if(seen.has(n))continue;if(n.startsW
 for(const p of walk(resolve(launcher,'public'))){const n=relative(resolve(launcher,'public'),p).replaceAll('\\','/');if(!/\.(js|mjs)$/.test(n)||n.startsWith('vendor/')){
  if(n==='index.html'&&!development)put(n,Buffer.from(readFileSync(p,'utf8').replace('地灵殿 WEB DEV','地灵殿 WEB 1.0').replace('<span class="brand-version">DEV</span>','<span class="brand-version">1.0</span>')));else copy(n,p);
 }}
-for(const [name,src] of [['th11.html','managed.html'],['managed.css','managed.css'],['keyboard.mjs','keyboard.mjs']])copy('runtime/th11/'+name,resolve(root,'sdl-runtime',src));
-const buildMarker="/*TH11_BUILD_INFO*/{version:'development-incomplete',completeGame:false}",managed=readFileSync(resolve(root,'sdl-runtime/managed.mjs'),'utf8');
+for(const [name,src] of [['th11.html','managed.html'],['managed.css','managed.css'],['keyboard.mjs','keyboard.mjs'],['eagler-host.mjs','eagler-host.mjs'],['shell.mjs','shell.mjs']])copy('runtime/th11/'+name,resolve(root,'sdl-runtime',src));
+const buildMarker="/*TH11_BUILD_INFO*/{version:'development-incomplete',completeGame:false}",managed=readFileSync(resolve(root,'sdl-runtime/shell.mjs'),'utf8');
 if(!managed.includes(buildMarker))throw Error('Runtime build-info marker missing');
-put('runtime/th11/managed.mjs',Buffer.from(managed.replace(buildMarker,JSON.stringify({version:(development?'development-':'1.0.0-sdl3-')+build.sha256.slice(0,12),completeGame:!development&&build.completeGame}))));
+put('runtime/th11/shell.mjs',Buffer.from(managed.replace(buildMarker,JSON.stringify({version:(development?'development-':'1.0.0-sdl3-')+build.sha256.slice(0,12),completeGame:!development&&build.completeGame}))));
 put('runtime/th11/th11.mjs',loader);put('runtime/th11/th11.wasm',wasm);
 const chunks=[],files=[];let size=0;function dataFile(filename,path){const bytes=readFileSync(path);chunks.push(bytes);files.push({filename,start:size,end:size+bytes.length});size+=bytes.length;}
 dataFile('/th11.dat',resolve(workspace,'[th11] 东方地灵殿 (汉化版+日文版)/th11.dat'));
