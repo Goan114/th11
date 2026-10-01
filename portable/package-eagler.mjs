@@ -22,7 +22,7 @@ const entry='th11.html';
 // TH11 rasterizes original GDI glyph coverage; the baked tables ship as runtime
 // resources under /fonts. The shared host installs them alongside the archive.
 const fontNames=['font0.bin','font1.bin','font2.bin','font3.bin','cp932.bin','blend4444.bin'];
-const runtimeNames=['shell.mjs','managed.css','keyboard.mjs','eagler-host.mjs'];
+const runtimeNames=['shell.mjs','managed.css','keyboard.mjs','directory-keyboard.mjs','eagler-host.mjs'];
 const names=[entry,'manifest.json',...runtimeNames,'motion-replay.mjs',game+'-sdl.mjs',game+'-sdl.wasm','resources.json',...fontNames.map(n=>'fonts/'+n)];
 const allowed=new Set([...names,'runtime-files.json']);
 function walk(dir){return existsSync(dir)?readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(resolve(dir,e.name)):[resolve(dir,e.name)]):[];}

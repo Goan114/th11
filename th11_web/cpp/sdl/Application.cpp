@@ -11,6 +11,8 @@
 #include "../../../portable/sdl/FrameCadence.hpp"
 #include "../../../portable/input/TouchController.hpp"
 #include <algorithm>
+EM_JS(int, th11_browser_keyboard, (), { return typeof Module["resetBrowserKeyboard"] === "function"; });
+EM_JS(void, th11_reset_browser_keyboard, (), { Module["resetBrowserKeyboard"]?.(); });
 EM_JS(void, th11_browser_frame, (int ok,double milliseconds,unsigned ticks), { Module["onGameFrame"]?.(ok,milliseconds,ticks); });
 #include <vector>
 #include <string>
@@ -270,15 +272,15 @@ touhou::input::TouchState touch_state(){
     s.x=p.position.x;s.y=p.position.y;s.fast=float(p.normal_speed)/128;s.slow=float(p.focus_speed)/128;
     s.min_x=-184;s.max_x=184;s.min_y=32;s.max_y=432;return s;
 }
-void clear_inputs(){for(auto& k:keyboard_map)k.hosted=false;previous_scans.fill(0);SDL_ResetKeyboard();gestures.reset();if(app.session.battle)app.session.battle->player_input.movement.touch_mode=0;}
+void clear_inputs(){th11_reset_browser_keyboard();SDL_ResetKeyboard();for(auto& k:keyboard_map)k.hosted=false;previous_scans.fill(0);gestures.reset();if(app.session.battle)app.session.battle->player_input.movement.touch_mode=0;}
 bool sample_and_tick(){
     SDL_Event event;while(SDL_PollEvent(&event)){
         if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST)clear_inputs();
         else if(event.type==SDL_EVENT_JOYSTICK_ADDED)add_controller(event.jdevice.which);
         else if(event.type==SDL_EVENT_JOYSTICK_REMOVED&&controller&&SDL_GetJoystickID(controller)==event.jdevice.which){SDL_CloseJoystick(controller);controller=nullptr;int count=0;auto* ids=SDL_GetJoysticks(&count);for(int i=0;i<count;++i)add_controller(ids[i]);SDL_free(ids);}
     }
-    bool keys[256]{};std::array<u8,256> scans{};const auto* physical=SDL_GetKeyboardState(nullptr);
-    for(const auto& k:keyboard_map)if(k.hosted||(k.native!=SDL_SCANCODE_UNKNOWN&&physical[k.native])){if(k.scan<256)scans[k.scan]=128;if(k.vk<256)keys[k.vk]=true;if(k.vk>=160&&k.vk<=165)keys[16+(k.vk-160)/2]=true;if(k.scan==28||k.scan==156)keys[13]=true;}
+    bool keys[256]{};std::array<u8,256> scans{};const auto* physical=th11_browser_keyboard()?nullptr:SDL_GetKeyboardState(nullptr);
+    for(const auto& k:keyboard_map)if(k.hosted||(physical&&k.native!=SDL_SCANCODE_UNKNOWN&&physical[k.native])){if(k.scan<256)scans[k.scan]=128;if(k.vk<256)keys[k.vk]=true;if(k.vk>=160&&k.vk<=165)keys[16+(k.vk-160)/2]=true;if(k.scan==28||k.scan==156)keys[13]=true;}
     if(app.session.title){auto& title=*app.session.title;for(u32 i=0;i<256;++i)title.key_edges[i]=scans[i]&~previous_scans[i];title.number_keys=0;for(u32 i=0;i<9;++i)if(keys[49+i])title.number_keys|=1u<<i;}
     previous_scans=scans;
     const auto sample=gestures.sample(touch_state(),SDL_GetTicks(),keys[16],keys[37]||keys[38]||keys[39]||keys[40]);

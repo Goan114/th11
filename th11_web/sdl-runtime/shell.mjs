@@ -1,6 +1,7 @@
 // Platform shell for the upstream eagler-touhou/1 Launcher contract.
 // Game construction, input, timing, rendering, text and sound belong to C++.
 // Mirrors th10/th20 shell.mjs and imports the shared eagler-host transport.
+import {createBrowserKeyboard} from './directory-keyboard.mjs';
 import createModule from './th11-sdl.mjs';
 import {scanCodes} from './keyboard.mjs';
 import {validateMotionReplay} from './motion-replay.mjs';
@@ -12,6 +13,11 @@ const validEpoch=Number.isSafeInteger(epoch)&&epoch>0;
 const emit=(event,fields={})=>parent.postMessage({protocol,game,epoch,event,...fields},location.origin);
 const $=s=>document.querySelector(s);
 let Module,core,app=0,launched=false,first=false,stopping=false,language=query.get('language')==='lang_zh-hans'?'chs':'jp',options={},music=true,musicMode='none';
+const keyboard=createBrowserKeyboard({
+ accept:code=>!!scanCodes[code],
+ send:(code,down)=>core?.th11_key(scanCodes[code],+down),
+});
+function clearKeyboard(){keyboard.clear();core?.th11_keys_clear();}
 let frames=0,lastHealth=0,lastFrame=0,maxGap=0,lastPresented=0,saveTimer=null,storageSync=Promise.resolve();
 const cancelTouches=bindOutsideTouches(document,canvas,()=>core,()=>launched&&options.touchEnabled);
 const error=reason=>{const message=reason?.stack||String(reason);const node=$('#error');if(node)node.textContent=message;emit('error',{message,error:message});console.error(reason);};
@@ -67,10 +73,10 @@ function closeAudio(){
  if(borrowed)s.audioContext=undefined;
  try{core.th11_audio_close();}finally{if(borrowed)s.audioContext=context;}
 }
-async function stop(){if(stopping)return;stopping=true;try{core.th11_loop_stop();await save();closeAudio();launched=false;emit('exit',{code:0,status:'success'});}finally{stopping=false;}}
+async function stop(){if(stopping)return;stopping=true;clearKeyboard();try{core.th11_loop_stop();await save();closeAudio();launched=false;emit('exit',{code:0,status:'success'});}finally{stopping=false;}}
 function path(value){const name=String(value).replaceAll('\\','/').toLowerCase().replace(/^\/savesth11\//,'').replace(/^\//,'');if(!/^(?:scoreth11\.dat|th11\.cfg|replay\/th11_(?:\d{2}|ud[a-z0-9]{4})\.rpyx?)$/.test(name))throw Error('存档路径无效');return name;}
 function launch(){
- if(launched)return;
+ if(launched)return;clearKeyboard();
  if(!core.th11_initialize())throw Error(coreError());
  if(core.th11_phase()===4&&!core.th11_return_title())throw Error(coreError());
  launched=true;apply();first=false;lastPresented=0;lastHealth=performance.now();lastFrame=0;frames=0;maxGap=0;
@@ -81,8 +87,8 @@ function launch(){
 async function command(m){switch(m.command){
  case 'configure':if(launched)throw Error('不能配置正在运行的游戏');language=m.language==='lang_zh-hans'?'chs':'jp';options=normalizeOptions(m.options);music=m.music!=='none';musicMode=m.music;await installResources(m.sharedResources);await installResources(m.runtimeResources);await installResources(m.resources);if(m.runtimePack)await installRuntimePack(m.runtimePack);apply();return {};
  case 'resources':await installResources(m.resources);return {};
- case 'keyboard':{const code=runtimeKeyboardCode(m);if(code&&scanCodes[code])core.th11_key(scanCodes[code],+!!m.down);return {};}
- case 'keyboard-clear':core.th11_keys_clear();return {};
+ case 'keyboard':if(launched&&!document.hidden&&!stopping)keyboard.event(m,!!m.down,'hosted');return {};
+ case 'keyboard-clear':clearKeyboard();return {};
  case 'touch-cancel':cancelTouches();return {};
  case 'direct-touch':directTouch(core,canvas,m,{width:innerWidth,height:innerHeight});return {};
  case 'touch-controls':touchControls(core,options,m);return {};
@@ -100,27 +106,32 @@ async function command(m){switch(m.command){
  }
  case 'remove':{if(launched)throw Error('请先退出游戏');Module.FS.unlink('/savesth11/'+path(m.path));await sync(false);return {};}
  default:throw Error('不支持的操作');}}
-function runtimeKeyboardCode(message){
- const code=String(message.code||'');if(code&&code!=='Unidentified')return code;
- const key=String(message.key||'').toLowerCase(),location=Number(message.location)||0;
- const byKey={z:'KeyZ',x:'KeyX',shift:location===2?'ShiftRight':'ShiftLeft',escape:'Escape',esc:'Escape',arrowup:'ArrowUp',arrowdown:'ArrowDown',arrowleft:'ArrowLeft',arrowright:'ArrowRight',control:location===2?'ControlRight':'ControlLeft',q:'KeyQ',s:'KeyS',home:'Home',enter:location===3?'NumpadEnter':'Enter',d:'KeyD',r:'KeyR',tab:'Tab',backspace:'Backspace'};
- if(byKey[key])return byKey[key];if(/^f(?:[1-7]|12)$/.test(key))return key.toUpperCase();
- const keyCode=Number(message.keyCode)||0,byCode={8:'Backspace',9:'Tab',13:location===3?'NumpadEnter':'Enter',16:location===2?'ShiftRight':'ShiftLeft',17:location===2?'ControlRight':'ControlLeft',27:'Escape',36:'Home',37:'ArrowLeft',38:'ArrowUp',39:'ArrowRight',40:'ArrowDown',68:'KeyD',81:'KeyQ',82:'KeyR',83:'KeyS',88:'KeyX',90:'KeyZ',112:'F1',113:'F2',114:'F3',115:'F4',116:'F5',117:'F6',118:'F7',123:'F12'};
- return byCode[keyCode]||'';
-}
 let queue=Promise.resolve();
-window.addEventListener('message',event=>{const m=event.data;if(!validEpoch||event.source!==parent||event.origin!==location.origin||m?.protocol!==protocol||m.game!==game||m.epoch!==epoch||typeof m.command!=='string')return;queue=queue.then(async()=>{if(await initialized===false)return;try{const result=await command(m);if(typeof m.request==='string')parent.postMessage({protocol,game,epoch,request:m.request,ok:true,...result},location.origin);}catch(e){if(typeof m.request==='string')parent.postMessage({protocol,game,epoch,request:m.request,ok:false,error:String(e),errno:e?.errno},location.origin);else error(e);}}).catch(error);});
-document.addEventListener('visibilitychange',()=>{if(!core||!launched)return;core.th11_keys_clear();cancelTouches();if(document.hidden){suspendRuntimeAudio(Module,core);queue=queue.then(save).catch(error);}else void resumeForegroundAudio(true);});
-window.addEventListener('blur',()=>{if(core){core.th11_keys_clear();cancelTouches();}});
-window.addEventListener('pagehide',()=>{cancelTouches();if(core&&launched){suspendRuntimeAudio(Module,core);void save().catch(console.error);}});
+async function dispatchCommand(m){
+ try{const result=await command(m);if(typeof m.request==='string')parent.postMessage({protocol,game,epoch,request:m.request,ok:true,...result},location.origin);}
+ catch(e){if(typeof m.request==='string')parent.postMessage({protocol,game,epoch,request:m.request,ok:false,error:String(e),errno:e?.errno},location.origin);else error(e);}
+}
+window.addEventListener('message',event=>{
+ const m=event.data;if(!validEpoch||event.source!==parent||event.origin!==location.origin||m?.protocol!==protocol||m.game!==game||m.epoch!==epoch||typeof m.command!=='string')return;
+ if(m.command==='keyboard'||m.command==='keyboard-clear'){void dispatchCommand(m);return;}
+ queue=queue.then(async()=>{if(await initialized===false)return;await dispatchCommand(m);}).catch(error);
+});
+document.addEventListener('visibilitychange',()=>{if(!core||!launched)return;clearKeyboard();cancelTouches();if(document.hidden){suspendRuntimeAudio(Module,core);queue=queue.then(save).catch(error);}else void resumeForegroundAudio(true);});
+window.addEventListener('blur',()=>{if(core){clearKeyboard();cancelTouches();}});
+window.addEventListener('pagehide',()=>{clearKeyboard();cancelTouches();if(core&&launched){suspendRuntimeAudio(Module,core);void save().catch(console.error);}});
 window.addEventListener('pageshow',()=>{if(core&&launched&&!document.hidden)void resumeForegroundAudio(true);});
-canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();core?.sdl_loop_pause(1);error('图形环境已失效，请退出后重新开始。');});
+canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();clearKeyboard();core?.sdl_loop_pause(1);error('图形环境已失效，请退出后重新开始。');});
+for(const name of ['pointerdown','keydown'])window.addEventListener(name,()=>{if(Module?.SDL3?.audioContext?.state!=='running')void resumeForegroundAudio(true);},{capture:true});
+for(const name of ['keydown','keyup'])window.addEventListener(name,event=>{
+ if(!core||!launched||stopping||document.hidden)return;
+ keyboard.event(event,name==='keydown');
+},{capture:true});
 // A mobile browser may terminate a hidden page before pagehide's IDB callback.
 // Persist during play as well, with writes serialized by the sync chain.
 setInterval(()=>{if(launched&&!document.hidden&&core)try{queue=queue.then(()=>save()).catch(error);}catch(e){error(e);}},30000);
 const initialized=(async()=>{
  let audioContext;try{audioContext=parent.__touhouAudioContext;}catch{}
- Module=await createModule({canvas,noInitialRun:true,...(audioContext?{SDL3:{audioContext}}:{}),print:console.log,printErr:console.error,
+ Module=await createModule({canvas,noInitialRun:true,resetBrowserKeyboard:()=>keyboard.clear(),...(audioContext?{SDL3:{audioContext}}:{}),print:console.log,printErr:console.error,
   instantiateWasm(imports,ready){return WebAssembly.instantiateStreaming(fetch('./th11-sdl.wasm'),imports).then(({instance,module})=>{core=instance.exports;ready(instance,module);return core;});}});
  window.Module=Module;window.FS=Module.FS;window.core=core;
  observeMusicWrites(Module,core,game);
