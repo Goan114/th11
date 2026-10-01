@@ -271,8 +271,14 @@ touhou::input::TouchState touch_state(){
     s.min_x=-184;s.max_x=184;s.min_y=32;s.max_y=432;return s;
 }
 void clear_inputs(){for(auto& k:keyboard_map)k.hosted=false;previous_scans.fill(0);SDL_ResetKeyboard();gestures.reset();if(app.session.battle)app.session.battle->player_input.movement.touch_mode=0;}
+void touch_event(unsigned type,int id,float x,float y){if(std::isfinite(x)&&std::isfinite(y))gestures.pointer(type,id,x,y,SDL_GetTicks(),touch_state(),false);}
+void cancel_touch(){gestures.cancel_transient();if(app.session.battle)app.session.battle->player_input.movement.touch_mode=0;}
 bool sample_and_tick(){
     SDL_Event event;while(SDL_PollEvent(&event)){
+        // Canvas gestures belong to SDL; the host bridge handles only gestures
+        // originating outside it. Match TH08/TH10's native finger-event path.
+        if(event.type==SDL_EVENT_FINGER_CANCELED){cancel_touch();continue;}
+        if(event.type==SDL_EVENT_FINGER_DOWN||event.type==SDL_EVENT_FINGER_MOTION||event.type==SDL_EVENT_FINGER_UP)touch_event(event.type==SDL_EVENT_FINGER_DOWN?0:event.type==SDL_EVENT_FINGER_MOTION?1:2,int(event.tfinger.fingerID),event.tfinger.x,event.tfinger.y);
         if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST)clear_inputs();
         else if(event.type==SDL_EVENT_JOYSTICK_ADDED)add_controller(event.jdevice.which);
         else if(event.type==SDL_EVENT_JOYSTICK_REMOVED&&controller&&SDL_GetJoystickID(controller)==event.jdevice.which){SDL_CloseJoystick(controller);controller=nullptr;int count=0;auto* ids=SDL_GetJoysticks(&count);for(int i=0;i<count;++i)add_controller(ids[i]);SDL_free(ids);}
@@ -303,6 +309,9 @@ EMSCRIPTEN_KEEPALIVE int th11_save_replay(unsigned slot,const char* name){return
 EMSCRIPTEN_KEEPALIVE int th11_initialize(){if(!th11::sdl::app.initialize())return 0;for(auto& k:th11::sdl::keyboard_map)k.native=SDL_GetScancodeFromName(k.sdl);th11::sdl::initialize_controller();return 1;}
 #if TH11_DEVELOPMENT_HARNESS
 EMSCRIPTEN_KEEPALIVE int th11_tick(unsigned held){return !th11::sdl::running&&th11::sdl::app.tick(held)?1:0;}
+EMSCRIPTEN_KEEPALIVE int th11_probe_platform_tick(){return !th11::sdl::running&&th11::sdl::sample_and_tick()?1:0;}
+EMSCRIPTEN_KEEPALIVE float th11_probe_player_x(){return th11::sdl::touch_state().x;}
+EMSCRIPTEN_KEEPALIVE int th11_probe_touch_motion(){const auto* b=th11::sdl::app.session.battle.get();return b?b->player_input.movement.touch_mode:0;}
 EMSCRIPTEN_KEEPALIVE int th11_probe_stage(unsigned stage,int character,int subtype,int difficulty){return th11::sdl::app.restart(stage,character,subtype,difficulty);}
 EMSCRIPTEN_KEEPALIVE int th11_probe_finish(){auto& s=th11::sdl::app.session;if(!s.battle)return 0;s.economy.score_units=1234567;s.battle->completion.state.exit=th11::StageExit::Ending;return 1;}
 EMSCRIPTEN_KEEPALIVE int th11_probe_complete(){auto& s=th11::sdl::app.session;return s.battle&&s.battle->dialogue_stage_complete();}
@@ -348,8 +357,8 @@ EMSCRIPTEN_KEEPALIVE void th11_loop_start(){
         if(!ok)running=false;return running?EM_TRUE:EM_FALSE;
     },reinterpret_cast<void*>(uintptr_t(++loop_epoch)));
 }
-EMSCRIPTEN_KEEPALIVE void th11_touch(unsigned type,int id,float x,float y){using namespace th11::sdl;if(std::isfinite(x)&&std::isfinite(y))gestures.pointer(type,id,x,y,SDL_GetTicks(),touch_state(),false);}
-EMSCRIPTEN_KEEPALIVE void th11_touch_cancel(){using namespace th11::sdl;gestures.cancel_transient();if(app.session.battle)app.session.battle->player_input.movement.touch_mode=0;}
+EMSCRIPTEN_KEEPALIVE void th11_touch(unsigned type,int id,float x,float y){th11::sdl::touch_event(type,id,x,y);}
+EMSCRIPTEN_KEEPALIVE void th11_touch_cancel(){th11::sdl::cancel_touch();}
 EMSCRIPTEN_KEEPALIVE void th11_touch_options(unsigned enabled,unsigned mode,float sensitivity,unsigned two_finger,unsigned double_tap){using namespace th11::sdl;gestures.enabled=enabled!=0;gestures.unlimited=mode==1;gestures.sensitivity=std::isfinite(sensitivity)?std::clamp(sensitivity,1.f,3.f):1;gestures.two_finger=two_finger!=0;gestures.double_tap=double_tap!=0;if(gestures.set_mode(mode<=3?int(mode):0))if(app.session.battle)app.session.battle->player_input.movement.touch_mode=0;if(!enabled)gestures.cancel();}
 EMSCRIPTEN_KEEPALIVE void th11_touch_controls(unsigned enabled,unsigned fire,unsigned focus,unsigned bomb,unsigned escape){using namespace th11::sdl;gestures.enabled=enabled!=0;gestures.controls(fire!=0,focus!=0,bomb,escape,0,0);}
 EMSCRIPTEN_KEEPALIVE void th11_touch_stick(float x,float y){using namespace th11::sdl;gestures.stick_x=std::isfinite(x)?std::clamp(x/32767.f,-1.f,1.f):0;gestures.stick_y=std::isfinite(y)?std::clamp(y/32767.f,-1.f,1.f):0;}
