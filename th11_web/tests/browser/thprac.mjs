@@ -66,7 +66,13 @@ try{
     if(pending()[1]===0||!state()[14]||state()[15])throw Error('Mobile stage combo failed or accepted menu accidentally: '+JSON.stringify({pending:pending(),run:state()}));
     touch('down',left+30,top+173);native.sdl_touch_cancel();step(3);const cancelled=pending()[7];touch('move',left+160,top+173);if(pending()[7]!==cancelled)throw Error('Cancelled mobile pointer kept dragging');
     touch('down',30,30);touch('down',50,30,-101);touch('up',30,30);touch('up',50,30,-101);step(4);if(state()[14])throw Error('Mobile two-finger cancel failed');
-    if(!core._th11_probe_practice_menu(0,0,1))throw Error(error());step(4);touch('down',30,30);touch('up',30,30);step(4);if(!state()[15])throw Error('Mobile outside-window confirm failed');if(!core._th11_return_title())throw Error(error());step(3);
+    native.sdl_touch_controls(1,0,0,0,0,0);
+    if(!core._th11_probe_practice_menu(0,0,1))throw Error(error());step(4);touch('down',30,30);touch('up',30,30);step(120);if(!state()[15])throw Error('Mobile outside-window confirm failed');
+    if(!(core._th11_probe_gameplay_held()&1))throw Error('Enabled mobile fire was captured after Practice acceptance');
+    core._th11_keys_clear();step(4);if(!(core._th11_probe_gameplay_held()&1))throw Error('Lifecycle clear lost toggled mobile fire');
+    key(1);step(20);key(19);step(120);if(!(core._th11_probe_gameplay_held()&1))throw Error('Practice retry lost toggled mobile fire');
+    native.sdl_touch_controls(0,0,0,0,0,0);step(4);if(core._th11_probe_gameplay_held()&1)throw Error('Disabled mobile fire still shoots');
+    if(!core._th11_return_title())throw Error(error());step(3);
    },locale).catch(async error=>{await page.screenshot({path:resolve(out,locale+'-mobile-failure.png')});throw error;});
   }
   console.log(locale+': portrait/landscape/tablet direct-touch slider, stage combo and pointer cancellation passed');

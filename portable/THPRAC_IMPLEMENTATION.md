@@ -131,6 +131,19 @@ node th11_web/tests/browser/thprac.mjs
 
 ## Required before promotion
 
+### Mobile held-fire regression, 2026-10-04
+
+After Practice acceptance, the previous render owner waited for Z/X/Enter/Esc
+release before clearing menu capture. A mobile fire toggle continuously supplies
+Z in gameplay, so it could keep capture enabled indefinitely until toggled off.
+Capture now ends when the native Practice menu closes, independently of the
+gameplay fire owner. The browser regression fails before this fix and passes
+after it: fire remains ON through selection, entry, keyboard/lifecycle clear and
+Pause-R retry, and turning fire OFF stops it. All three locales and the portrait,
+landscape and tablet viewports pass alongside the existing lifecycle cases.
+This bounded fix is based on Eagler commit 60cfe04 in the isolated THPrac
+worktree; native-oracle/physical-device gaps above are unchanged.
+
 - Native-vs-portable live cheat/time-lock/auto-bomb/BGM oracle comparisons.
 - Full-run stage-six replay transition/fast-forward clock proof.
 - All Clear Bonus stage-one through stage-five transition lifecycle proof.

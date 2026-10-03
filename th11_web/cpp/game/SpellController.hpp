@@ -30,6 +30,7 @@ public:
     Vec3 circle_position{};
     std::array<char,64> name{};
     i32 selection=0,stage=1;
+    u32 translation_rank=0;
     bool replay=false,bomb_active=false;
     bool practice_time_lock=false;
     bool begin(i32 id,i32 timeout,const char* name,Vec3 boss,bool bomb);

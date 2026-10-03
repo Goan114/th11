@@ -5,6 +5,7 @@
 #include "ThpracUi.hpp"
 #include "../game/PracticeSections.hpp"
 #if TH11_DEVELOPMENT_HARNESS
+#include "../game/Localization.hpp"
 #include "imgui.h"
 #include "imgui_internal.h"
 #endif
@@ -385,8 +386,18 @@ EMSCRIPTEN_KEEPALIVE int th11_initialize(){if(!th11::sdl::app.initialize())retur
 EMSCRIPTEN_KEEPALIVE int th11_probe_practice_menu(int character,int subtype,int difficulty){auto& a=th11::sdl::app;auto& s=a.session;if(!s.open_title(a.resources,false,th11::TitleScreen::Practice))return 0;s.title->selection.character=character;s.title->selection.partner=subtype;s.title->selection.difficulty=difficulty;return a.tick(0);}
 EMSCRIPTEN_KEEPALIVE const double* th11_probe_practice_state(){static double words[20];const auto& s=th11::sdl::app.session;s.practice.run.encode(words);words[14]=s.practice.menu;words[15]=s.practice.active;words[16]=s.economy.power;words[17]=s.practice.cheats;words[18]=s.practice.tracker_bombs;words[19]=s.practice.tracker_misses;return words;}
 EMSCRIPTEN_KEEPALIVE const int* th11_probe_title_state(){static int words[4];const auto* t=th11::sdl::app.session.title.get();words[0]=t?int(t->screen):-1;words[1]=t?t->substate:-1;words[2]=t?t->cursor.selected:-1;words[3]=t?t->timer.current:-1;return words;}
+EMSCRIPTEN_KEEPALIVE int th11_probe_paused(){return th11::sdl::app.session.state.phase==th11::GameSessionPhase::paused;}
+EMSCRIPTEN_KEEPALIVE unsigned th11_probe_gameplay_held(){const auto* b=th11::sdl::app.session.battle.get();return b?b->player_input.movement.held:0;}
+EMSCRIPTEN_KEEPALIVE const char* th11_probe_spell_name(unsigned id,unsigned rank){return th11::Localization::SpellName(id,"original",rank);}
 EMSCRIPTEN_KEEPALIVE const double* th11_probe_practice_pending(){static double words[th11::PracticeConfig::word_count];th11::sdl::app.session.practice.configured.encode(words);return words;}
 EMSCRIPTEN_KEEPALIVE int th11_probe_practice_popup(){return th11::browser::ThpracUi::captures_pointer(-100,-100);}
+EMSCRIPTEN_KEEPALIVE int th11_probe_records(){
+ auto& a=th11::sdl::app;auto& s=a.session;if(!s.open_title(a.resources,false,th11::TitleScreen::Records))return 0;
+ for(int id:{162,164,171}){auto* aggregate=s.scores.characters[6].data()+0x664+id*0x90;auto* own=s.scores.characters[0].data()+0x664+id*0x90;
+  std::snprintf(reinterpret_cast<char*>(aggregate),64,"Original spell %d",id+1);
+  const int seen=id+1,captured=id-160;std::memcpy(aggregate+0x84,&seen,4);std::memcpy(own+0x80,&captured,4);std::memcpy(own+0x84,&seen,4);
+ }return a.tick(0);
+}
 EMSCRIPTEN_KEEPALIVE unsigned th11_probe_practice_windows(){unsigned mask=0;const char* names[]{"Mod Menu###th11-thprac-overlay","Tracker###th11-thprac-tracker","Advanced Options###th11-thprac-advanced"};for(unsigned i=0;i<3;++i){auto* w=ImGui::FindWindowByName(names[i]);if(w&&w->Active&&!w->Hidden)mask|=1u<<i;}return mask;}
 static std::vector<th11::u8> th11_probe_replay;
 EMSCRIPTEN_KEEPALIVE int th11_probe_practice_save(){return th11::sdl::app.session.save_replay("THPRAC",th11_probe_replay,true);}
