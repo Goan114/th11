@@ -3,6 +3,7 @@
 // Mirrors th10/th20 shell.mjs and imports the shared eagler-host transport.
 import createModule from './th11-sdl.mjs';
 import {scanCodes} from './keyboard.mjs';
+import {createBrowserKeyboard} from './directory-keyboard.mjs';
 import {validateMotionReplay} from './motion-replay.mjs';
 import {bindOutsideTouches,normalizeOptions,applyTouchOptions,touchControls,suspendRuntimeAudio,resumeRuntimeAudio,directTouch,installResources as installHostResources,observeMusicWrites,mountManagedData,isSupersededRuntimeError} from './eagler-host.mjs';
 const runtimeBuild=/*TH11_BUILD_INFO*/{version:'development-incomplete',completeGame:false};
@@ -58,6 +59,12 @@ function apply(){Module.eaglerOptions=options;applyTouchOptions(core,options);co
 let thpracKeyboardBits=0;
 function thpracKey(code,down){const bit=code==='Backspace'?1:code==='Tab'?1<<8:code==='F12'?1<<9:/^F[1-7]$/.test(code)?1<<Number(code.slice(1)):0;if(!bit||!options.thpracEnabled)return false;if(down)thpracKeyboardBits|=bit;else thpracKeyboardBits&=~bit;(Module.eaglerControls??={}).thpracKeyboardBits=thpracKeyboardBits;return true;}
 function clearPracticeKeys(){thpracKeyboardBits=0;if(Module)(Module.eaglerControls??={}).thpracKeyboardBits=0;}
+const keyboard=createBrowserKeyboard({
+ accept:code=>!!scanCodes[code],
+ send(code,down){if(!core)return;if(thpracKey(code,down))return;core.th11_key(scanCodes[code],+down);},
+ onClear:clearPracticeKeys
+});
+function clearKeyboard(){keyboard.clear();core?.th11_keys_clear();}
 async function resumeForegroundAudio(forcePause=false){
  if(!Module||!core||!launched||document.hidden)return false;
  if(forcePause)core.sdl_loop_pause(1);
@@ -70,7 +77,7 @@ function closeAudio(){
  if(borrowed)s.audioContext=undefined;
  try{core.th11_audio_close();}finally{if(borrowed)s.audioContext=context;}
 }
-async function stop(){if(stopping)return;stopping=true;try{clearPracticeKeys();core.th11_loop_stop();await save();closeAudio();launched=false;emit('exit',{code:0,status:'success'});}finally{stopping=false;}}
+async function stop(){if(stopping)return;stopping=true;try{clearKeyboard();core.th11_loop_stop();await save();closeAudio();launched=false;emit('exit',{code:0,status:'success'});}finally{stopping=false;}}
 function path(value){const name=String(value).replaceAll('\\','/').toLowerCase().replace(/^\/savesth11\//,'').replace(/^\//,'');if(!/^(?:scoreth11\.dat|th11\.cfg|replay\/th11_(?:\d{2}|ud[a-z0-9]{4})\.rpyx?)$/.test(name))throw Error('存档路径无效');return name;}
 function launch(){
  if(launched)return;
@@ -84,8 +91,8 @@ function launch(){
 async function command(m){switch(m.command){
  case 'configure':if(launched)throw Error('不能配置正在运行的游戏');language=m.language==='lang_zh-hans'?'chs':'jp';options=normalizeOptions(m.options);music=m.music!=='none';musicMode=m.music;await installResources(m.sharedResources);await installResources(m.runtimeResources);await installResources(m.resources);if(m.runtimePack)await installRuntimePack(m.runtimePack);apply();return {};
  case 'resources':await installResources(m.resources);return {};
- case 'keyboard':{const code=runtimeKeyboardCode(m);if(thpracKey(code,!!m.down))return {};if(code&&scanCodes[code])core.th11_key(scanCodes[code],+!!m.down);return {};}
- case 'keyboard-clear':clearPracticeKeys();core.th11_keys_clear();return {};
+ case 'keyboard':if(launched&&!document.hidden&&!stopping)keyboard.event(m,!!m.down,'hosted');return {};
+ case 'keyboard-clear':clearKeyboard();return {};
  case 'thprac-mouse':{if(!options.thpracEnabled||!core.sdl_thprac_mouse)return {};const r=canvas.getBoundingClientRect(),scale=Math.min(r.width/640,r.height/480);core.sdl_thprac_mouse(m.type==='down'?1:m.type==='up'?2:0,(Number(m.x)-r.left-(r.width-640*scale)/2)/scale,(Number(m.y)-r.top-(r.height-480*scale)/2)/scale);return {};}
  case 'touch-cancel':cancelTouches();return {};
  case 'direct-touch':directTouch(core,canvas,m,{width:innerWidth,height:innerHeight});return {};
@@ -104,22 +111,13 @@ async function command(m){switch(m.command){
  }
  case 'remove':{if(launched)throw Error('请先退出游戏');Module.FS.unlink('/savesth11/'+path(m.path));await sync(false);return {};}
  default:throw Error('不支持的操作');}}
-function runtimeKeyboardCode(message){
- const code=String(message.code||'');if(code&&code!=='Unidentified')return code;
- const key=String(message.key||'').toLowerCase(),location=Number(message.location)||0;
- const byKey={z:'KeyZ',x:'KeyX',shift:location===2?'ShiftRight':'ShiftLeft',escape:'Escape',esc:'Escape',arrowup:'ArrowUp',arrowdown:'ArrowDown',arrowleft:'ArrowLeft',arrowright:'ArrowRight',control:location===2?'ControlRight':'ControlLeft',q:'KeyQ',s:'KeyS',home:'Home',enter:location===3?'NumpadEnter':'Enter',d:'KeyD',r:'KeyR',tab:'Tab',backspace:'Backspace'};
- if(byKey[key])return byKey[key];if(/^f(?:[1-7]|12)$/.test(key))return key.toUpperCase();
- const keyCode=Number(message.keyCode)||0,byCode={8:'Backspace',9:'Tab',13:location===3?'NumpadEnter':'Enter',16:location===2?'ShiftRight':'ShiftLeft',17:location===2?'ControlRight':'ControlLeft',27:'Escape',36:'Home',37:'ArrowLeft',38:'ArrowUp',39:'ArrowRight',40:'ArrowDown',68:'KeyD',81:'KeyQ',82:'KeyR',83:'KeyS',88:'KeyX',90:'KeyZ',112:'F1',113:'F2',114:'F3',115:'F4',116:'F5',117:'F6',118:'F7',123:'F12'};
- return byCode[keyCode]||'';
-}
 let queue=Promise.resolve();
 window.addEventListener('message',event=>{const m=event.data;if(!validEpoch||event.source!==parent||event.origin!==location.origin||m?.protocol!==protocol||m.game!==game||m.epoch!==epoch||typeof m.command!=='string')return;queue=queue.then(async()=>{if(await initialized===false)return;try{const result=await command(m);if(typeof m.request==='string')parent.postMessage({protocol,game,epoch,request:m.request,ok:true,...result},location.origin);}catch(e){if(typeof m.request==='string')parent.postMessage({protocol,game,epoch,request:m.request,ok:false,error:String(e),errno:e?.errno},location.origin);else error(e);}}).catch(error);});
-document.addEventListener('visibilitychange',()=>{if(!core||!launched)return;clearPracticeKeys();core.th11_keys_clear();cancelTouches();if(document.hidden){suspendRuntimeAudio(Module,core);queue=queue.then(save).catch(error);}else void resumeForegroundAudio(true);});
-window.addEventListener('blur',()=>{clearPracticeKeys();if(core){core.th11_keys_clear();cancelTouches();}});
+document.addEventListener('visibilitychange',()=>{if(!core||!launched)return;clearKeyboard();cancelTouches();if(document.hidden){suspendRuntimeAudio(Module,core);queue=queue.then(save).catch(error);}else void resumeForegroundAudio(true);});
+window.addEventListener('blur',()=>{clearKeyboard();if(core)cancelTouches();});
 window.addEventListener('eagler-thprac-menu',event=>emit('thprac-menu',{open:!!event.detail?.open}));
-document.addEventListener('keydown',event=>{if(thpracKey(event.code,true))event.preventDefault();});
-document.addEventListener('keyup',event=>{if(thpracKey(event.code,false))event.preventDefault();});
-window.addEventListener('pagehide',()=>{clearPracticeKeys();cancelTouches();if(core&&launched){suspendRuntimeAudio(Module,core);void save().catch(console.error);}});
+for(const name of ['keydown','keyup'])document.addEventListener(name,event=>{if(!core||!launched||document.hidden||stopping)return;if(keyboard.event(event,name==='keydown'))event.preventDefault();});
+window.addEventListener('pagehide',()=>{clearKeyboard();cancelTouches();if(core&&launched){suspendRuntimeAudio(Module,core);void save().catch(console.error);}});
 window.addEventListener('pageshow',()=>{if(core&&launched&&!document.hidden)void resumeForegroundAudio(true);});
 canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();core?.sdl_loop_pause(1);error('图形环境已失效，请退出后重新开始。');});
 // A mobile browser may terminate a hidden page before pagehide's IDB callback.
