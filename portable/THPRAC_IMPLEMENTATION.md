@@ -1,9 +1,16 @@
 # TH11 THPrac adaptation — in progress
 
-This adaptation is not a supported or released THPrac runtime yet.
-The user requested source integration and push on 2026-10-03. Integration keeps
-the ordinary build OFF and launcher capability false; it does not constitute
-THPrac capability promotion or deployment. The remaining gates below stay open.
+The user requested the ordinary launcher option on 2026-10-03, with device
+testing after their own deployment. TH11 now uses the same production entry and
+prelaunch enable/locale options as TH08/TH10; no separate test product is added.
+The remaining verification gaps below stay open, not relabeled as PASS.
+
+Build the normal thprac-capable runtime with `node portable/build.mjs --thprac`,
+then package it with `node portable/package-eagler.mjs` and EAGLER_FONT_ROOT set
+to the baked font directory. The launcher publication must include shared
+`/unifont.otf`. Build/Runtime manifests attest the actual compile flag; a build
+without the flag remains vanilla and does not advertise thprac. The user-facing
+launcher option still decides whether the compiled practice owner is enabled.
 
 ## Source authority
 
@@ -75,10 +82,11 @@ node portable/check-th11-thprac.mjs '<path to th11.data>' '<path to thprac repo>
   Backspace/Tab/F12, stage-six and Extra special phases (120 live ticks each).
   Screenshots were inspected: the native menu renders over the game correctly.
 - THPrac ON and default OFF compile and link. OFF omits the configuration
-  export; the release capability remains false while promotion gates are open.
+  export; ON now attests the optional production capability, requested by the
+  user for post-deployment testing through the ordinary launcher toggle.
 
 Latest ON WASM SHA256:
-`53d0d27b710a8468ee5d37e982c01d93d7bf8361f5c42f7a0f801a83ca71f98b`.
+`aba813872a5b0703e5cec606879c4617d656b18759f3002f756c8ea2d8ceebda`.
 Latest default OFF WASM SHA256:
 `85c1d3277764903fc4c6dd20416dc966adede8ed87960b5c4501fa21f11b1e6b`.
 Retail archive used for CRC generation (not included in Git):
@@ -111,7 +119,8 @@ taps do not accept runs. Outside-window tap-confirm and two-finger-cancel pass.
 Native Backspace/Tab/F12 window visibility is asserted against the shared
 key-bit carrier, in addition to the original desktop/lifecycle regression.
 This is browser-emulated mobile evidence, not physical Android/iOS certification.
-Launcher capability publication is still gated on the broader promotion checks.
+Launcher capability is published for user-requested deployment testing; this
+does not claim physical-device or native-oracle certification.
 
 ```powershell
 $env:EAGLER_WORKSPACE = '<maintainer workspace>'
@@ -130,4 +139,4 @@ node th11_web/tests/browser/thprac.mjs
 - Default-OFF build gating and truthful build/launcher capability attestation.
 - Automated lifecycle and browser/device verification; no UI-only proof.
 
-Do not cherry-pick/promote this unfinished layer as complete THPrac support.
+Do not describe the still-open native-oracle/device gates as complete THPrac proof.
