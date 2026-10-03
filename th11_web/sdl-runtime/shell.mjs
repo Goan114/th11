@@ -54,7 +54,10 @@ async function installRuntimePack(pack){
   Module.FS.writeFile(file.path,file.bytes,{canOwn:true});runtimePackFiles.push(file.path);
  }
 }
-function apply(){applyTouchOptions(core,options);core.th11_music_enabled(+music);}
+function apply(){Module.eaglerOptions=options;applyTouchOptions(core,options);core.th11_music_enabled(+music);}
+let thpracKeyboardBits=0;
+function thpracKey(code,down){const bit=code==='Backspace'?1:code==='Tab'?1<<8:code==='F12'?1<<9:/^F[1-7]$/.test(code)?1<<Number(code.slice(1)):0;if(!bit||!options.thpracEnabled)return false;if(down)thpracKeyboardBits|=bit;else thpracKeyboardBits&=~bit;(Module.eaglerControls??={}).thpracKeyboardBits=thpracKeyboardBits;return true;}
+function clearPracticeKeys(){thpracKeyboardBits=0;if(Module)(Module.eaglerControls??={}).thpracKeyboardBits=0;}
 async function resumeForegroundAudio(forcePause=false){
  if(!Module||!core||!launched||document.hidden)return false;
  if(forcePause)core.sdl_loop_pause(1);
@@ -67,7 +70,7 @@ function closeAudio(){
  if(borrowed)s.audioContext=undefined;
  try{core.th11_audio_close();}finally{if(borrowed)s.audioContext=context;}
 }
-async function stop(){if(stopping)return;stopping=true;try{core.th11_loop_stop();await save();closeAudio();launched=false;emit('exit',{code:0,status:'success'});}finally{stopping=false;}}
+async function stop(){if(stopping)return;stopping=true;try{clearPracticeKeys();core.th11_loop_stop();await save();closeAudio();launched=false;emit('exit',{code:0,status:'success'});}finally{stopping=false;}}
 function path(value){const name=String(value).replaceAll('\\','/').toLowerCase().replace(/^\/savesth11\//,'').replace(/^\//,'');if(!/^(?:scoreth11\.dat|th11\.cfg|replay\/th11_(?:\d{2}|ud[a-z0-9]{4})\.rpyx?)$/.test(name))throw Error('存档路径无效');return name;}
 function launch(){
  if(launched)return;
@@ -81,8 +84,9 @@ function launch(){
 async function command(m){switch(m.command){
  case 'configure':if(launched)throw Error('不能配置正在运行的游戏');language=m.language==='lang_zh-hans'?'chs':'jp';options=normalizeOptions(m.options);music=m.music!=='none';musicMode=m.music;await installResources(m.sharedResources);await installResources(m.runtimeResources);await installResources(m.resources);if(m.runtimePack)await installRuntimePack(m.runtimePack);apply();return {};
  case 'resources':await installResources(m.resources);return {};
- case 'keyboard':{const code=runtimeKeyboardCode(m);if(code&&scanCodes[code])core.th11_key(scanCodes[code],+!!m.down);return {};}
- case 'keyboard-clear':core.th11_keys_clear();return {};
+ case 'keyboard':{const code=runtimeKeyboardCode(m);if(thpracKey(code,!!m.down))return {};if(code&&scanCodes[code])core.th11_key(scanCodes[code],+!!m.down);return {};}
+ case 'keyboard-clear':clearPracticeKeys();core.th11_keys_clear();return {};
+ case 'thprac-mouse':{if(!options.thpracEnabled||!core.sdl_thprac_mouse)return {};const r=canvas.getBoundingClientRect(),scale=Math.min(r.width/640,r.height/480);core.sdl_thprac_mouse(m.type==='down'?1:m.type==='up'?2:0,(Number(m.x)-r.left-(r.width-640*scale)/2)/scale,(Number(m.y)-r.top-(r.height-480*scale)/2)/scale);return {};}
  case 'touch-cancel':cancelTouches();return {};
  case 'direct-touch':directTouch(core,canvas,m,{width:innerWidth,height:innerHeight});return {};
  case 'touch-controls':touchControls(core,options,m);return {};
@@ -110,9 +114,12 @@ function runtimeKeyboardCode(message){
 }
 let queue=Promise.resolve();
 window.addEventListener('message',event=>{const m=event.data;if(!validEpoch||event.source!==parent||event.origin!==location.origin||m?.protocol!==protocol||m.game!==game||m.epoch!==epoch||typeof m.command!=='string')return;queue=queue.then(async()=>{if(await initialized===false)return;try{const result=await command(m);if(typeof m.request==='string')parent.postMessage({protocol,game,epoch,request:m.request,ok:true,...result},location.origin);}catch(e){if(typeof m.request==='string')parent.postMessage({protocol,game,epoch,request:m.request,ok:false,error:String(e),errno:e?.errno},location.origin);else error(e);}}).catch(error);});
-document.addEventListener('visibilitychange',()=>{if(!core||!launched)return;core.th11_keys_clear();cancelTouches();if(document.hidden){suspendRuntimeAudio(Module,core);queue=queue.then(save).catch(error);}else void resumeForegroundAudio(true);});
-window.addEventListener('blur',()=>{if(core){core.th11_keys_clear();cancelTouches();}});
-window.addEventListener('pagehide',()=>{cancelTouches();if(core&&launched){suspendRuntimeAudio(Module,core);void save().catch(console.error);}});
+document.addEventListener('visibilitychange',()=>{if(!core||!launched)return;clearPracticeKeys();core.th11_keys_clear();cancelTouches();if(document.hidden){suspendRuntimeAudio(Module,core);queue=queue.then(save).catch(error);}else void resumeForegroundAudio(true);});
+window.addEventListener('blur',()=>{clearPracticeKeys();if(core){core.th11_keys_clear();cancelTouches();}});
+window.addEventListener('eagler-thprac-menu',event=>emit('thprac-menu',{open:!!event.detail?.open}));
+document.addEventListener('keydown',event=>{if(thpracKey(event.code,true))event.preventDefault();});
+document.addEventListener('keyup',event=>{if(thpracKey(event.code,false))event.preventDefault();});
+window.addEventListener('pagehide',()=>{clearPracticeKeys();cancelTouches();if(core&&launched){suspendRuntimeAudio(Module,core);void save().catch(console.error);}});
 window.addEventListener('pageshow',()=>{if(core&&launched&&!document.hidden)void resumeForegroundAudio(true);});
 canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();core?.sdl_loop_pause(1);error('图形环境已失效，请退出后重新开始。');});
 // A mobile browser may terminate a hidden page before pagehide's IDB callback.
