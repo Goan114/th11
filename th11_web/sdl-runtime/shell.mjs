@@ -80,7 +80,7 @@ function closeAudio(){
 async function stop(){if(stopping)return;stopping=true;try{clearKeyboard();core.th11_loop_stop();await save();closeAudio();launched=false;emit('exit',{code:0,status:'success'});}finally{stopping=false;}}
 function path(value){const name=String(value).replaceAll('\\','/').toLowerCase().replace(/^\/savesth11\//,'').replace(/^\//,'');if(!/^(?:scoreth11\.dat|th11\.cfg|replay\/th11_(?:\d{2}|ud[a-z0-9]{4})\.rpyx?)$/.test(name))throw Error('存档路径无效');return name;}
 function launch(){
- if(launched)return;
+ if(launched)return;clearKeyboard();
  if(!core.th11_initialize())throw Error(coreError());
  if(core.th11_phase()===4&&!core.th11_return_title())throw Error(coreError());
  launched=true;apply();first=false;lastPresented=0;lastHealth=performance.now();lastFrame=0;frames=0;maxGap=0;
@@ -112,20 +112,32 @@ async function command(m){switch(m.command){
  case 'remove':{if(launched)throw Error('请先退出游戏');Module.FS.unlink('/savesth11/'+path(m.path));await sync(false);return {};}
  default:throw Error('不支持的操作');}}
 let queue=Promise.resolve();
-window.addEventListener('message',event=>{const m=event.data;if(!validEpoch||event.source!==parent||event.origin!==location.origin||m?.protocol!==protocol||m.game!==game||m.epoch!==epoch||typeof m.command!=='string')return;queue=queue.then(async()=>{if(await initialized===false)return;try{const result=await command(m);if(typeof m.request==='string')parent.postMessage({protocol,game,epoch,request:m.request,ok:true,...result},location.origin);}catch(e){if(typeof m.request==='string')parent.postMessage({protocol,game,epoch,request:m.request,ok:false,error:String(e),errno:e?.errno},location.origin);else error(e);}}).catch(error);});
+async function dispatchCommand(m){
+ try{const result=await command(m);if(typeof m.request==='string')parent.postMessage({protocol,game,epoch,request:m.request,ok:true,...result},location.origin);}
+ catch(e){if(typeof m.request==='string')parent.postMessage({protocol,game,epoch,request:m.request,ok:false,error:String(e),errno:e?.errno},location.origin);else error(e);}
+}
+window.addEventListener('message',event=>{
+ const m=event.data;if(!validEpoch||event.source!==parent||event.origin!==location.origin||m?.protocol!==protocol||m.game!==game||m.epoch!==epoch||typeof m.command!=='string')return;
+ if(m.command==='keyboard'||m.command==='keyboard-clear'){void dispatchCommand(m);return;}
+ queue=queue.then(async()=>{if(await initialized===false)return;await dispatchCommand(m);}).catch(error);
+});
 document.addEventListener('visibilitychange',()=>{if(!core||!launched)return;clearKeyboard();cancelTouches();if(document.hidden){suspendRuntimeAudio(Module,core);queue=queue.then(save).catch(error);}else void resumeForegroundAudio(true);});
 window.addEventListener('blur',()=>{clearKeyboard();if(core)cancelTouches();});
 window.addEventListener('eagler-thprac-menu',event=>emit('thprac-menu',{open:!!event.detail?.open}));
-for(const name of ['keydown','keyup'])document.addEventListener(name,event=>{if(!core||!launched||document.hidden||stopping)return;if(keyboard.event(event,name==='keydown'))event.preventDefault();});
 window.addEventListener('pagehide',()=>{clearKeyboard();cancelTouches();if(core&&launched){suspendRuntimeAudio(Module,core);void save().catch(console.error);}});
 window.addEventListener('pageshow',()=>{if(core&&launched&&!document.hidden)void resumeForegroundAudio(true);});
-canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();core?.sdl_loop_pause(1);error('图形环境已失效，请退出后重新开始。');});
+canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();clearKeyboard();core?.sdl_loop_pause(1);error('图形环境已失效，请退出后重新开始。');});
+for(const name of ['pointerdown','keydown'])window.addEventListener(name,()=>{if(Module?.SDL3?.audioContext?.state!=='running')void resumeForegroundAudio(true);},{capture:true});
+for(const name of ['keydown','keyup'])window.addEventListener(name,event=>{
+ if(!core||!launched||stopping||document.hidden)return;
+ if(keyboard.event(event,name==='keydown'))event.preventDefault();
+},{capture:true});
 // A mobile browser may terminate a hidden page before pagehide's IDB callback.
 // Persist during play as well, with writes serialized by the sync chain.
 setInterval(()=>{if(launched&&!document.hidden&&core)try{queue=queue.then(()=>save()).catch(error);}catch(e){error(e);}},30000);
 const initialized=(async()=>{
  let audioContext;try{audioContext=parent.__touhouAudioContext;}catch{}
- Module=await createModule({canvas,noInitialRun:true,...(audioContext?{SDL3:{audioContext}}:{}),print:console.log,printErr:console.error,
+ Module=await createModule({canvas,noInitialRun:true,resetBrowserKeyboard:()=>keyboard.clear(),...(audioContext?{SDL3:{audioContext}}:{}),print:console.log,printErr:console.error,
   instantiateWasm(imports,ready){return WebAssembly.instantiateStreaming(fetch('./th11-sdl.wasm'),imports).then(({instance,module})=>{core=instance.exports;ready(instance,module);return core;});}});
  window.Module=Module;window.FS=Module.FS;window.core=core;
  observeMusicWrites(Module,core,game);
