@@ -98,6 +98,34 @@ try{
    assert.equal(run[5],7);assert.equal(run[6],2);
    await page.evaluate(()=>{core.eaglerControls.thpracKeyboardBits=1<<9;step();core.eaglerControls.thpracKeyboardBits=0;step();if(!core._th11_return_title())throw Error(error());step(3);if(state()[15])throw Error('Exit leaked live practice');});
   }
+  await page.evaluate(()=>{
+   const pose=()=>Array.from(new Int32Array(core.HEAPU8.buffer,core._th11_probe_function_state(),5));
+   const start=(character,partner)=>{
+    native.sdl_touch_controls(0,0,0,0,0,0);
+    if(!core._th11_probe_practice_menu(character,partner,1))throw Error(error());step(5);
+    const values=[1,0,6,0,0,9,0,80,0,0,50000,0,0,1],p=core._malloc(values.length*8);
+    try{new Float64Array(core.HEAPU8.buffer,p,values.length).set(values);if(!core._th11_practice_configure(p,values.length))throw Error('C test config');}finally{core._free(p);}
+    step(3);key(44);step(120);native.sdl_touch_options(1,0,1);native.sdl_touch_controls(1,0,0,0,0,0);step(4);
+    if(!pose()[3]||pose()[4])throw Error('C test requires actual active boss and no dialogue');
+   };
+   start(0,0);
+   core._th11_probe_function_pose(0);key(46);if(pose()[1]>=99)throw Error('C must not teleport away from an edge');
+   core._th11_probe_function_pose(-1);key(46);if(pose()[1]!==99)throw Error('C failed left native gap activation');
+   step(25);if(pose()[0]<=0)throw Error('Left gap did not cross the playfield');step(30);
+   core._th11_probe_function_pose(1);key(46);if(pose()[1]!==100)throw Error('C failed right native gap activation');
+   step(25);if(pose()[0]>=0)throw Error('Right gap did not cross the playfield');
+   if(!core._th11_return_title())throw Error(error());step(5);
+   start(1,1);const before=pose()[2];core._th11_key(46,1);step(12);core._th11_key(46,0);step(3);
+   if(pose()[2]!==((before+1)%5))throw Error('C must switch Marisa B once, not repeat while held');
+   key(46);if(pose()[2]!==((before+2)%5))throw Error('Second C tap failed to switch formation');
+   const switched=pose()[2];if(!core._th11_probe_practice_save())throw Error('C replay save failed');
+   if(!core._th11_probe_practice_play())throw Error(error());step(180);
+   if(pose()[2]!==switched)throw Error('Replay failed to reproduce C formation switches');
+   if(!core._th11_return_title())throw Error(error());step(5);
+   start(0,1);core._th11_probe_function_pose(-1);key(46);if(pose()[1]>=99)throw Error('C incorrectly enabled gaps on another shot');
+   if(!core._th11_return_title())throw Error(error());step(5);
+  });
+  console.log(locale+': ordinary C input activates both edge gaps, switches Marisa B once and leaves other shots unchanged');
   for(const [name,stage,phases] of [['TH11_ST6_MID1',5,1],['TH11_ST6_BOSS9',5,5],['TH11_ST7_END_S9',6,3],['TH11_ST7_END_S10',6,4]])for(let phase=0;phase<phases;++phase){
    const section=sections.find(s=>s.key===name).id;
    await page.evaluate(({section,stage,phase})=>{
