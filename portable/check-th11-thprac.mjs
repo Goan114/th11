@@ -1,5 +1,6 @@
 // Source/resource proof only. This does not attest UI or gameplay lifecycle.
 import {spawnSync} from 'node:child_process';
+import {commonInclude} from './common-root.mjs';
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 const root=resolve(import.meta.dirname,'..');
@@ -14,7 +15,7 @@ run(process.execPath,['portable/generate-thprac.mjs',resolve(upstream),'--check'
 const files=['PracticePatcher','PracticeConfig','PracticeReplay','StageCompletion','GameEconomy','Archive','ResourceCrypt','Lzss','EclResource','GameResources','AnmResource','ShtResource','StageResource'].map(n=>'th11_web/cpp/game/'+n+'.cpp');
 const target=resolve(out,'check.cjs');
 const generate=process.argv.includes('--generate-sites');
-run(process.env.TH_PYTHON||'python',[compiler,'-O2','-std=c++17',...(generate?['-DTH11_PRACTICE_SITE_GENERATION=1']:[]),'-sDEFAULT_TO_CXX=1','-sNODERAWFS=1','-sALLOW_MEMORY_GROWTH=1','-sINITIAL_MEMORY=134217728','-sSTACK_SIZE=2097152','portable/check-th11-thprac.cpp',...files,'-o',target]);
+run(process.env.TH_PYTHON||'python',[compiler,'-I'+commonInclude,'-O2','-std=c++17',...(generate?['-DTH11_PRACTICE_SITE_GENERATION=1']:[]),'-sDEFAULT_TO_CXX=1','-sNODERAWFS=1','-sALLOW_MEMORY_GROWTH=1','-sINITIAL_MEMORY=134217728','-sSTACK_SIZE=2097152','portable/check-th11-thprac.cpp',...files,'-o',target]);
 run(process.execPath,[target,resolve(data)]);
 const sites=spawnSync(process.execPath,[target,resolve(data),'--emit-sites'],{cwd:root,env,encoding:'utf8',windowsHide:true});
 if(sites.status!==0)throw Error('Instruction-site generation failed: '+sites.stderr);

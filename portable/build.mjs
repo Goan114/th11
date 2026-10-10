@@ -7,6 +7,7 @@ import {readFileSync,writeFileSync,readdirSync,mkdirSync,existsSync} from 'node:
 import {resolve,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
+import {commonInclude,commonThpracHeaders} from './common-root.mjs';
 const workspace=resolve(fileURLToPath(new URL('../',import.meta.url))),root=resolve(workspace,'th11_web'),out=resolve(root,'artifacts/sdl3');mkdirSync(out,{recursive:true});
 // TH11 ships no tools/emsdk; prefer an explicit EMSDK, then the shared TH08 SDK.
 const sdk=process.env.EMSDK??(existsSync(resolve(workspace,'tools/emsdk'))?resolve(workspace,'tools/emsdk'):resolve(workspace,'../th08/tools/emsdk'));
@@ -18,11 +19,12 @@ const run=args=>new Promise((done,reject)=>{const p=spawn(python,[emcc,...args],
 const thprac=process.env.TH_ENABLE_THPRAC==='1'||process.argv.includes('--thprac');
 const imgui=resolve(root,'cpp/third_party/imgui');
 const common=['-O2','-g0','-std=c++17','-ffp-contract=off','-fno-strict-aliasing','-fno-exceptions','-fno-rtti','-DTH_NATIVE_PLATFORM=1','-DTH_ENABLE_THCRAP=1','-DTH11_DEVELOPMENT_HARNESS=0','-DIMGUI_DISABLE_WIN32_FUNCTIONS','-I'+imgui,...(thprac?['-DTH_ENABLE_THPRAC=1']:[]),'--use-port=sdl3','--use-port=sdl3_ttf'];
+common.push('-I'+commonInclude);
 const files=dir=>readdirSync(resolve(root,dir),{withFileTypes:true}).flatMap(e=>e.isDirectory()?files(dir+'/'+e.name):e.name.endsWith('.cpp')?[resolve(root,dir,e.name)]:[]);
 const source=[...files('cpp/game'),...files('cpp/sdl'),resolve(workspace,'portable/sdl/Renderer.cpp')];
 source.push(...['imgui.cpp','imgui_draw.cpp','imgui_freetype.cpp','imgui_tables.cpp','imgui_widgets.cpp'].map(n=>resolve(imgui,n)));
 const headerFiles=dir=>readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?headerFiles(resolve(dir,e.name)):/\.(h|hpp|inc)$/.test(e.name)?[resolve(dir,e.name)]:[]);
-const headers=[...headerFiles(resolve(root,'cpp')),...headerFiles(resolve(workspace,'portable/sdl')),...headerFiles(resolve(workspace,'portable/input'))].sort();
+const headers=[...headerFiles(resolve(root,'cpp')),...headerFiles(resolve(workspace,'portable/sdl')),...headerFiles(resolve(workspace,'portable/input')),...commonThpracHeaders].sort();
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const headerHash=sha(headers.map(p=>p+sha(readFileSync(p))).join('\n'));
 const objects=resolve(out,'objects');mkdirSync(objects,{recursive:true});

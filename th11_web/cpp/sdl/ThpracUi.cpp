@@ -6,7 +6,7 @@
 #include "../game/PracticeUiLabels.hpp"
 #include "../game/PracticeVersion.hpp"
 #include "../game/PracticeLicense.hpp"
-#include "../game/PracticeKeyMonitor.hpp"
+#include <eagler/thprac/PracticeKeyMonitor.hpp>
 #include "../../../portable/sdl/Renderer.hpp"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -39,15 +39,15 @@ enum Vk {VK_BACK=8,VK_TAB=9,VK_RETURN=13,VK_SHIFT=16,VK_CONTROL=17,VK_MENU=18,VK
 const char* tr(const char* zh,const char* en,const char* ja){return locale==0?zh:locale==2?ja:en;}
 const char* label(const char* const* values){return values[locale];}
 void help_marker(const char* const* description){ImGui::SameLine();ImGui::TextDisabled("(?)");if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",label(description));}
-PracticeKeyMonitor key_monitor;
-#include "PracticeKeyHud.inc"
+eagler::thprac::PracticeKeyMonitor key_monitor;
+#include <eagler/thprac/PracticeKeyHud.inc>
 struct PracticeCounter {int64_t QuadPart=0;};
 void practice_counter_frequency(PracticeCounter* c){c->QuadPart=1000000000;}
 void practice_counter_now(PracticeCounter* c){c->QuadPart=int64_t(SDL_GetTicksNS());}
 std::function<unsigned()> practice_random_generator(unsigned minimum,unsigned maximum){return std::bind(std::uniform_int_distribution<unsigned>(minimum,maximum),std::mt19937(std::mt19937::result_type(std::time(nullptr))));}
-#include "PracticeReaction.inc"
+#include <eagler/thprac/PracticeReaction.inc>
 THGuiTestReactionTest reaction_test;
-#include "PracticeSpeed.inc"
+#include <eagler/thprac/PracticeSpeed.inc>
 void key_monitor_options(GameSession& runtime){
  ImGui::Checkbox(label(practice_THPRAC_KB_OPEN),&runtime.practice.show_keyboard_monitor);if(!runtime.practice.show_keyboard_monitor)return;
  if(!key_monitor.g_record_key_aps){if(ImGui::Button(label(practice_THPRAC_KB_RECORD_START))){key_monitor.clear_record();key_monitor.g_record_key_aps=true;}}

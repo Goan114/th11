@@ -1,7 +1,9 @@
 #pragma once
 #include "Types.hpp"
-#include "PracticeInput.hpp"
-#include "PracticeSpeed.hpp"
+#include <eagler/thprac/PracticeInput.hpp>
+#include "Types.hpp"
+#include <eagler/thprac/PracticeSpeed.hpp>
+#include "PracticeCadence.hpp"
 #include <vector>
 #include <string>
 #include <functional>
@@ -36,8 +38,8 @@ struct PracticeState {
     int locked_formation=0;
     u32 lock_frames=0;
     bool lock_tick_seen=false;
-    PracticeInput input;
-    PracticeSpeed speed;
+    eagler::thprac::PracticeInput input;
+    eagler::thprac::PracticeSpeed speed;
     std::function<void(u32)> record_keys;
     void clear_run(){active=replay=menu=accepted=replay_candidate_valid=assisted=lock_tick_seen=false;run.reset();replay_candidate.reset();tracker_misses=tracker_bombs=lock_frames=0;input.reset();}
 };
