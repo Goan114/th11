@@ -186,7 +186,9 @@ node portable/check-th11-thprac.mjs '<path to th11.data>' '<path to thprac repo>
 - Separate pending config and live run owners; native Pause-R preserves the
   run, cancel/exit clear it. Vanilla and custom replay owners reject cheat keys.
 - USER/PRAC metadata is appended after native/touch metadata and restored only
-  for the matching selected stage; assisted recordings cannot be saved.
+  for the matching selected stage. Assisted recordings can also be saved;
+  the live assisted marker is retained, but playback does not reapply cheats
+  and deterministic reproduction is not guaranteed (matching TH06–TH08).
 - F1..F5 reach the native player/enemy/spell owners; F6 BGM uses upstream
   ElBgmTest state transitions. Initial boss music, stage-six intro skipping and
   stage-logo conditions follow THBGMTest and the original source hooks.

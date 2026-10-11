@@ -20,6 +20,7 @@
 #include <emscripten/html5.h>
 #include "../../../portable/sdl/FrameCadence.hpp"
 #include "../../../portable/input/TouchController.hpp"
+#include <eagler/thprac/PracticePointer.hpp>
 #include <algorithm>
 EM_JS(int, th11_browser_keyboard, (), { return typeof Module["resetBrowserKeyboard"] === "function"; });
 EM_JS(void, th11_reset_browser_keyboard, (), { Module["resetBrowserKeyboard"]?.(); });
@@ -317,6 +318,7 @@ Application app;
 struct Key {const char* code;const char* sdl;u32 scan,vk;bool hosted=false;SDL_Scancode native=SDL_SCANCODE_UNKNOWN;};
 #include "../../../portable/input/KeyboardMap.inc"
 touhou::input::TouchController gestures;
+eagler::thprac::PracticePointer practice_pointers;
 #ifdef TH_ENABLE_THPRAC
 PracticeCadence cadence;
 #else
@@ -354,6 +356,7 @@ touhou::input::TouchState touch_state(){
     s.min_x=-184;s.max_x=184;s.min_y=32;s.max_y=432;return s;
 }
 void clear_inputs(){
+    practice_pointers.reset();
 #ifdef TH_ENABLE_THPRAC
     browser::ThpracUi::cancel_pointer();
     app.session.practice.input.reset();
@@ -365,15 +368,15 @@ void touch_event(unsigned type,int id,float x,float y){
 #ifdef TH_ENABLE_THPRAC
     // Same normalized direct-touch -> native ImGui bridge as TH08/TH10.
     // Both the launcher carrier and canvas-origin SDL fingers enter here.
-    if(browser::ThpracUi::captures_game_input()){
-        const bool consumed=browser::ThpracUi::captures_pointer(x*640.f,y*480.f);
+    if(practice_pointers.route(type,id,type==0&&browser::ThpracUi::captures_pointer(x*640.f,y*480.f))){
         browser::ThpracUi::mouse(type==0?1:type==1?0:2,x*640.f,y*480.f);
-        if(consumed){gestures.cancel_transient();return;}
+        return;
     }
 #endif
     gestures.pointer(type,id,x,y,SDL_GetTicks(),touch_state(),false);
 }
 void cancel_touch(){
+    practice_pointers.reset();
 #ifdef TH_ENABLE_THPRAC
     browser::ThpracUi::cancel_pointer();
 #endif

@@ -16,6 +16,7 @@ const compiler=['install/emscripten/emcc.py','upstream/emscripten/emcc.py'].map(
 const env={...process.env,EM_CONFIG:resolve(sdk,'.emscripten'),EMSDK:sdk,TEMP:out,TMP:out};
 const compile=args=>{const p=spawnSync('python',[compiler,...args],{env,encoding:'utf8',windowsHide:true});if(p.status!==0)throw Error(p.stdout+p.stderr);};
 const flags=['-O2','-std=c++17','-ffp-contract=off','-fno-strict-aliasing','-fno-exceptions','-fno-rtti','-DTH_NATIVE_PLATFORM=1','-DTH_ENABLE_THCRAP=1','-DTH_ENABLE_THPRAC=1','-DTH11_DEVELOPMENT_HARNESS=1','-DIMGUI_DISABLE_WIN32_FUNCTIONS','-I'+resolve(root,'cpp/third_party/imgui'),'--use-port=sdl3','--use-port=sdl3_ttf'];
+flags.push('-I'+resolve(process.env.EAGLER_COMMON_ROOT||resolve(game,'third_party/eagler-common'),'include'));
 const app=resolve(out,'application.o');compile([...flags,'-c',resolve(root,'cpp/sdl/Application.cpp'),'-o',app]);
 const objectRoot=resolve(root,'artifacts/sdl3/objects');
 const objects=readdirSync(objectRoot).filter(n=>n.endsWith('.o')&&!n.includes('Application_cpp')).map(n=>resolve(objectRoot,n));
@@ -36,6 +37,8 @@ try{
   await page.evaluate(async ({locale,music})=>{
    const {default:create}=await import('/probe.mjs');const c=window.core=window.Module=await create({canvas:document.querySelector('canvas'),instantiateWasm(imports,ready){return WebAssembly.instantiateStreaming(fetch('/probe.wasm'),imports).then(({instance,module})=>{window.native=instance.exports;ready(instance,module);return instance.exports;});}});c.eaglerOptions={thpracEnabled:true,thpracLocale:locale};c.eaglerControls={thpracKeyboardBits:0};
    for(const name of ['/th11.dat','/unifont.otf',...music,...['font0.bin','font1.bin','font2.bin','font3.bin','cp932.bin','blend4444.bin'].map(n=>'/fonts/'+n)]){c.FS.mkdirTree(name.slice(0,name.lastIndexOf('/'))||'/');c.FS.writeFile(name,new Uint8Array(await fetch(name).then(r=>r.arrayBuffer())));}
+   const {touchControls}=await import('/eagler-host.mjs');
+   window.hostControls=message=>touchControls(window.native,{touchEnabled:true,touchSensitivity:100},message,c);
    window.error=()=>{const p=c._th11_error();return new TextDecoder().decode(c.HEAPU8.subarray(p,c.HEAPU8.indexOf(0,p)));};
    window.step=(n=1)=>{for(let i=0;i<n;++i)if(!c._th11_probe_platform_tick())throw Error(error());};
    window.key=(scan,n=1)=>{c._th11_key(scan,1);step(n);c._th11_key(scan,0);step(2);};
@@ -85,7 +88,14 @@ try{
     step(3);key(44);step(120);const s=state();if(!s[15]||s[16]!==values[7]||s[2]!==values[2])throw Error('Native accept/run economy mismatch');
     // Original Pause -> R retry must preserve the run, not pending menu edits.
     key(1);step(20);key(19);step(20);if(!state()[15]||state()[5]!==7||state()[6]!==2)throw Error('Native pause retry lost practice parameters');
-    if(!core._th11_probe_practice_save())throw Error('Custom replay save failed');
+    // Enable and disable F1: assisted stays latched even with no active cheats.
+    if(shot===0){
+     const carrier=bits=>{core.eaglerControls.thpracKeyboardBits=bits;step();core.eaglerControls.thpracKeyboardBits=0;step(3);};
+     carrier(1);carrier(1<<1);if(!(state()[17]&1))throw Error('Assisted save fixture did not enable F1');
+     if(!core._th11_probe_practice_save())throw Error('Replay saving with active F1 was blocked');
+     carrier(1<<1);carrier(1);
+    }
+    if(!core._th11_probe_practice_save())throw Error('Custom/assisted replay save failed');
     const replay=core.HEAPU8.slice(core._th11_probe_practice_replay_data(),core._th11_probe_practice_replay_data()+core._th11_probe_practice_replay_size());if(!new TextDecoder().decode(replay).includes('PRAC'))throw Error('Saved replay omitted PRAC');
     if(!core._th11_probe_practice_play())throw Error(error());if(!state()[15]||state()[5]!==7)throw Error('Replay failed to restore practice owner');
     for(const [carrier,window,label] of [[1,1,'Backspace'],[1<<8,2,'Tab'],[1<<9,4,'F12']]){
@@ -104,6 +114,15 @@ try{
    if(!core._th11_probe_practice_menu(0,0,1))throw Error(error());step(4);key(44);step(120);
    const carrier=bits=>{core.eaglerControls.thpracKeyboardBits=bits;step();core.eaglerControls.thpracKeyboardBits=0;step(3);};
    carrier(1);const uBefore=state()[17];carrier(1<<10);if((state()[17]^uBefore)!==32)throw Error('Mobile U carrier did not enable enemy invincibility');carrier(1<<10);carrier(1);
+   // The new mobile group is visibility state, not synthetic F-key input.
+   hostControls({thpracMobilePanelsEnabled:true,thpracMobilePanelsVisible:true});step(4);
+   if(core._th11_probe_practice_windows()!==7)throw Error('Mobile group omitted a native panel');
+   const tap=(x,y)=>{native.sdl_thprac_mouse(1,x,y);step(2);native.sdl_thprac_mouse(2,x,y);step(3);};
+   tap(40,65); // collapsed advanced header at (10,48)
+   tap(40,22); // expanded advanced header at its original (0,0)
+   hostControls({thpracMobilePanelsEnabled:true,thpracMobilePanelsVisible:false});step(3);
+   if(core._th11_probe_practice_windows())throw Error('Mobile group did not hide native panels');
+   hostControls({});step(3);
    carrier(1<<9);
    const click=(x,y)=>{native.sdl_thprac_mouse(1,x,y);step(2);native.sdl_thprac_mouse(2,x,y);step(3);};
    click(40,70);const initial=tools();click(16,118);if(tools()[0]===initial[0])throw Error('F12 touch disable-X checkbox did not change actual input owner');
